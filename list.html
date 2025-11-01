@@ -342,23 +342,39 @@ function escapeHTML(s){
   return String(s||"").replace(/[&<>\"']/g,(c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
 }
 function bindSwipe(track){
-  const wrap=track.parentElement, actions=wrap.querySelector(".actions");
-  const SW_LIGHT=40, SW_STRONG=120; let sx=0,dx=0,active=false;
-  const onStart=(x)=>{ active=true; sx=x; dx=0; track.style.transition="none"; };
-  const onMove=(x)=>{ if(!active) return; dx=x-sx; track.style.transform=`translateX(${dx}px)`; actions.style.opacity=Math.min(1,Math.abs(dx)/80); };
-  const onEnd=async()=>{ track.style.transition="transform .18s ease"; actions.style.opacity=0;
-    const id=wrap.dataset.id;
-    const act= dx>SW_STRONG?'complete' : dx<-SW_STRONG?'delete' : dx>SW_LIGHT?'pin' : dx<-SW_LIGHT?'menu' : null;
-    track.style.transform="translateX(0)"; dx=0; active=false;
-    if(!act) return; if(act==='menu'){ openActionSheet(wrap); return; } await runAction(id,act);
+  if (!track) return;                    // ★null guard
+  const wrap = track.parentElement;
+  const actions = wrap && wrap.querySelector(".actions");
+  if (!wrap || !actions) return;         // ★null guard
+
+  const SW_LIGHT = 40, SW_STRONG = 120;
+  let sx = 0, dx = 0, active = false;
+
+  const onStart = (x) => { active = true; sx = x; dx = 0; track.style.transition = "none"; };
+  const onMove  = (x) => { if (!active) return; dx = x - sx; track.style.transform = `translateX(${dx}px)`; if (actions) actions.style.opacity = Math.min(1, Math.abs(dx)/80); };
+  const onEnd   = async () => {
+    track.style.transition = "transform .18s ease";
+    if (actions) actions.style.opacity = 0;
+    const id  = wrap.dataset.id;
+    const act = dx > SW_STRONG ? "complete" :
+                dx < -SW_STRONG ? "delete" :
+                dx > SW_LIGHT  ? "pin"     :
+                dx < -SW_LIGHT ? "menu"    : null;
+    track.style.transform = "translateX(0)";
+    dx = 0; active = false;
+    if (!act) return;
+    if (act === "menu") { openActionSheet(wrap); return; }
+    await runAction(id, act);
   };
-  track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
-  track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
-  track.addEventListener("touchend", onEnd);
-  track.addEventListener("mousedown", e=>onStart(e.clientX));
-  track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX); });
-  track.addEventListener("mouseup", onEnd);
+
+  track.addEventListener("touchstart", e => onStart(e.touches[0].clientX), { passive:true });
+  track.addEventListener("touchmove",  e => onMove(e.touches[0].clientX),   { passive:true });
+  track.addEventListener("touchend",   onEnd);
+  track.addEventListener("mousedown",  e => onStart(e.clientX));
+  track.addEventListener("mousemove",  e => { if (e.buttons === 1) onMove(e.clientX); });
+  track.addEventListener("mouseup",    onEnd);
 }
+
 function openActionSheet(wrap){
   const btns = wrap.querySelectorAll(".btn");
   wrap.classList.add("highlight");
@@ -405,18 +421,40 @@ async function loadTasks(userId){
   render();
 }
 
-function render(){
-  dbg('render() in items=', gAllTasks.length);
-  const { pinned, active, completed } = splitByStatus(gAllTasks);
-  $pinned.hidden = pinned.length===0; $completed.hidden = completed.length===0;
-  $pinnedList.innerHTML   = sortTasks(pinned).map(cardHTML).join("");
-  $activeList.innerHTML   = sortTasks(active).map(cardHTML).join("");
-  $completedList.innerHTML= sortTasks(completed).map(cardHTML).join("");
-  $empty.hidden = (pinned.length + active.length) > 0;
-  [...document.querySelectorAll(".track")].forEach(bindSwipe);
-  document.querySelector('.title').textContent = 'LIST｜タスク （debug受信:'+gAllTasks.length+'件）';
-  dbg('render() out activeDom=', document.querySelectorAll('#active-list .card').length);
-}
+    function render(){
+      dbg('render() in items=', gAllTasks.length);
+    
+      const { pinned, active, completed } = splitByStatus(gAllTasks);
+      $pinned.hidden   = pinned.length === 0;
+      $completed.hidden= completed.length === 0;
+    
+      // HTML 差し込み（ここは例外起きにくい）
+      $pinnedList.innerHTML    = sortTasks(pinned).map(cardHTML).join("");
+      $activeList.innerHTML    = sortTasks(active).map(cardHTML).join("");
+      $completedList.innerHTML = sortTasks(completed).map(cardHTML).join("");
+      $empty.hidden = (pinned.length + active.length) > 0;
+    
+      // ★ スワイプ初期化は try/catch でガード
+      try {
+        const tracks = document.querySelectorAll(".track");
+        tracks.forEach(t => { try { bindSwipe(t); } catch(e) { dbg('bindSwipe err:', e.message||e); }});
+        dbg('tracks=', tracks.length);
+      } catch(e) {
+        dbg('query .track failed:', e.message||e);
+      }
+    
+      // ★ タイトル要素がなければ書き換えない
+      const ttl = document.querySelector('.title');
+      if (ttl) {
+        ttl.textContent = 'LIST｜タスク （debug受信:'+ gAllTasks.length +'件）';
+      } else {
+        dbg('no .title element');
+      }
+    
+      const activeDom = document.querySelectorAll('#active-list .card').length;
+      dbg('render() out activeDom=', activeDom);
+    }
+
 
 async function bootstrap(){
   dbg('LIFF_ID=', LIFF_ID);
@@ -462,6 +500,7 @@ bootstrap();
 
   </body>
 </html>
+
 
 
 
