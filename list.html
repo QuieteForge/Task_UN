@@ -247,6 +247,8 @@
       </div>
     </main>
 
+    <pre id="debug" style="white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace; background:#fff;border:1px solid #eee; padding:8px; margin:8px; border-radius:8px;"></pre>
+
     <div id="toast" class="toast"></div>
 
     <script>
@@ -267,6 +269,8 @@
       const $completed = el("#completed");
       const $completedList = el("#completed-list");
       const $empty = el("#empty");
+
+      function dbg(...a){ const el=document.getElementById('debug'); if(!el) return; el.textContent += a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' ') + '\n'; }
 
       function toast(msg) {
         const t = el("#toast");
@@ -322,6 +326,7 @@
       }
 
       function render() {
+        dbg('render() in. items=', gAllTasks.length);
         const { pinned, active, completed } = splitByStatus(gAllTasks);
         const actSorted = sortTasks(active);
         const pinSorted = sortTasks(pinned);
@@ -338,6 +343,10 @@
 
         // スワイプをバインド
         [...document.querySelectorAll(".track")].forEach(bindSwipe);
+        dbg('render() out: activeDom=', document.querySelectorAll('#active-list .card').length);
+        const lenText = `（debug）受信件数: ${gAllTasks.length}`;
+        document.querySelector('.title').textContent = 'LIST｜タスク ' + lenText;
+
       }
 
       function cardHTML(t) {
@@ -509,56 +518,52 @@
       }
 
       async function loadTasks(userId) {
-  if (!userId) {
-    console.warn('loadTasks: userId is missing');
-    return;
-  }
-  const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
-  const res = await fetch(url, {
-    method: 'GET',
-    credentials: 'omit',
-    headers: { 'Content-Type': 'application/json' },
-  });
+            dbg('loadTasks called with userId=', userId);
+            if (!userId) {
+              // LIFF profile がまだなら再取得
+              try {
+                const prof = await liff.getProfile();
+                userId = prof.userId;
+                gUserId = userId;
+                dbg('loadTasks got userId from profile=', userId);
+              } catch(e) {
+                dbg('loadTasks: cannot get userId:', e.message || e);
+                toast('ユーザー取得に失敗');
+                return;
+              }
+            }
+          
+            const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
+            dbg('GET', url);
+          
+            let res, payload;
+            try {
+              res = await fetch(url, { method:'GET', credentials:'omit', headers:{'Content-Type':'application/json'} });
+              payload = await res.json();
+            } catch(e) {
+              dbg('fetch/json error:', e.message || e);
+              toast('読み込み失敗（通信/JSON）');
+              return;
+            }
+          
+            dbg('status=', res.status);
+            dbg('payload=', payload);
+          
+            if (!res.ok || !payload || payload.ok !== true) {
+              toast('読み込み失敗（HTTP '+res.status+'）');
+              return;
+            }
+          
+            // {ok:true, pinned/active/completed} を gAllTasks に統合
+            const pinned = Array.isArray(payload.pinned) ? payload.pinned : [];
+            const active = Array.isArray(payload.active) ? payload.active : [];
+            const completed = Array.isArray(payload.completed) ? payload.completed : [];
+            gAllTasks = [...pinned, ...active, ...completed];
+          
+            dbg('gAllTasks.length=', gAllTasks.length);
+            render();
+          }
 
-  let payload;
-  try {
-    payload = await res.json();
-  } catch (e) {
-    console.error('JSON parse error', e);
-    toast('読み込み失敗（JSON）');
-    return;
-  }
-
-  if (!res.ok) {
-    console.warn('HTTP error', res.status, payload);
-    toast('読み込み失敗（HTTP ' + res.status + '）');
-    return;
-  }
-
-  // APIの2パターンを吸収：
-  // A) {ok:true, data:[...]} 形式
-  // B) {ok:true, pinned:[...], active:[...], completed:[...]} 形式（あなたの現在の応答）
-  if (Array.isArray(payload)) {
-    gAllTasks = payload;
-  } else if (payload && payload.ok === true) {
-    if (Array.isArray(payload.data)) {
-      gAllTasks = payload.data;
-    } else if (payload.pinned || payload.active || payload.completed) {
-      const pinned = Array.isArray(payload.pinned) ? payload.pinned : [];
-      const active = Array.isArray(payload.active) ? payload.active : [];
-      const completed = Array.isArray(payload.completed) ? payload.completed : [];
-      gAllTasks = [...pinned, ...active, ...completed];
-    } else {
-      gAllTasks = [];
-    }
-  } else {
-    console.warn('API logical error', payload);
-    toast('読み込み失敗（API）');
-    return;
-  }
-
-  render();
-}
 
 
 
@@ -603,6 +608,7 @@
     </script>
   </body>
 </html>
+
 
 
 
