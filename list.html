@@ -252,6 +252,16 @@
     <div id="toast" class="toast"></div>
 
     <script>
+      // ---- global error to screen ----
+      window.addEventListener('error', e => {
+        const el = document.getElementById('debug');
+        if (el) el.textContent += `window.onerror: ${e.message}\n`;
+      });
+      window.addEventListener('unhandledrejection', e => {
+        const el = document.getElementById('debug');
+        if (el) el.textContent += `promise.reject: ${(e.reason && e.reason.message) || e.reason}\n`;
+      });
+
       /** =================== 設定（差し替え） =================== */
       const LIFF_ID = "2008311584-NdJqOqMn"; // ← あなたのLIFF ID
       const LIST_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-list"; // ← n8n: LIST (GET) エンドポイント
@@ -345,7 +355,7 @@
         [...document.querySelectorAll(".track")].forEach(bindSwipe);
         dbg('render() out: activeDom=', document.querySelectorAll('#active-list .card').length);
         const lenText = `（debug）受信件数: ${gAllTasks.length}`;
-        document.querySelector('.title').textContent = 'LIST｜タスク ' + lenText;
+        document.querySelector('.title').textContent = 'LIST｜タスク （debug 受信件数: ' + gAllTasks.length + '）';
 
       }
 
@@ -518,51 +528,57 @@
       }
 
       async function loadTasks(userId) {
-            dbg('loadTasks called with userId=', userId);
-            if (!userId) {
-              // LIFF profile がまだなら再取得
-              try {
-                const prof = await liff.getProfile();
-                userId = prof.userId;
-                gUserId = userId;
-                dbg('loadTasks got userId from profile=', userId);
-              } catch(e) {
-                dbg('loadTasks: cannot get userId:', e.message || e);
-                toast('ユーザー取得に失敗');
-                return;
-              }
-            }
-          
-            const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
-            dbg('GET', url);
-          
-            let res, payload;
+          dbg('loadTasks called with userId=', userId);
+          if (!userId) {
             try {
-              res = await fetch(url, { method:'GET', credentials:'omit', headers:{'Content-Type':'application/json'} });
-              payload = await res.json();
+              const prof = await liff.getProfile();
+              userId = prof.userId;
+              gUserId = userId;
+              dbg('loadTasks got userId from profile=', userId);
             } catch(e) {
-              dbg('fetch/json error:', e.message || e);
-              toast('読み込み失敗（通信/JSON）');
+              dbg('loadTasks: cannot get userId:', e.message || e);
+              toast('ユーザー取得に失敗');
               return;
             }
-          
-            dbg('status=', res.status);
-            dbg('payload=', payload);
-          
-            if (!res.ok || !payload || payload.ok !== true) {
-              toast('読み込み失敗（HTTP '+res.status+'）');
-              return;
-            }
-          
-            // {ok:true, pinned/active/completed} を gAllTasks に統合
-            const pinned = Array.isArray(payload.pinned) ? payload.pinned : [];
-            const active = Array.isArray(payload.active) ? payload.active : [];
-            const completed = Array.isArray(payload.completed) ? payload.completed : [];
-            gAllTasks = [...pinned, ...active, ...completed];
-          
-            dbg('gAllTasks.length=', gAllTasks.length);
-            render();
           }
+        
+          const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}&v=${Date.now()}`; // ★ キャッシュ殺し
+          dbg('GET', url);
+        
+          let res, payload, txt;
+          try {
+            res = await fetch(url, { method:'GET', credentials:'omit', headers:{'Accept':'application/json'} });
+            txt = await res.text();
+            dbg('status=', res.status, 'raw=', txt.slice(0,300));
+            try { payload = JSON.parse(txt); } catch { payload = null; }
+          } catch(e) {
+            dbg('fetch/json error:', e.message || e);
+            toast('読み込み失敗（通信/JSON）');
+            return;
+          }
+        
+          // 柔軟に解釈（ok が無くても data/active があれば使う）
+          let pinned = [], active = [], completed = [];
+          if (payload && payload.ok === true) {
+            pinned = Array.isArray(payload.pinned) ? payload.pinned : [];
+            active = Array.isArray(payload.active) ? payload.active : [];
+            completed = Array.isArray(payload.completed) ? payload.completed : [];
+          } else if (payload && Array.isArray(payload.data)) {
+            // 旧形式（配列そのもの or {data:[…]}) 対応
+            active = payload.data;
+          } else if (Array.isArray(payload)) {
+            active = payload;
+          } else {
+            dbg('unexpected payload shape');
+            toast('読み込み失敗（形式不正）');
+            return;
+          }
+        
+          gAllTasks = [...pinned, ...active, ...completed];
+          dbg('gAllTasks.length=', gAllTasks.length);
+          ();
+        }
+
 
 
 
@@ -570,44 +586,29 @@
       async function bootstrap() {
         // LIFF 初期化
         await liff.init({ liffId: LIFF_ID });
-        if (!liff.isLoggedIn()) liff.login();
+      
+        // ★ 初回は login() がリダイレクトするので、必ず return して以降を止める
+        if (!liff.isLoggedIn()) {
+          liff.login({ scope: ['openid','profile'] });
+          return;
+        }
+      
+        // ここに来ていればログイン済み
         const prof = await liff.getProfile();
         gUserId = prof.userId; // LINE userId
-        document.getElementById("user-pill").textContent =
-          "You: " + gUserId.slice(-6);
-
+        dbg('LIFF_ID=', LIFF_ID, ' userId=', gUserId);
+        document.getElementById("user-pill").textContent = "You: " + gUserId.slice(-6);
+      
         // UI ハンドラ
         document.getElementById("reload").onclick = () => loadTasks(gUserId);
-        document.getElementById("q").addEventListener("input", (e) => {
-          const q = e.target.value.trim().toLowerCase();
-          if (!q) {
-            render();
-            return;
-          }
-          const filtered = gAllTasks.filter(
-            (t) =>
-              (t.title || "").toLowerCase().includes(q) ||
-              (t.detail || "").toLowerCase().includes(q)
-          );
-          const { pinned, active, completed } = splitByStatus(filtered);
-          $pinned.hidden = pinned.length === 0;
-          $completed.hidden = completed.length === 0;
-          $empty.hidden = true;
-          $pinnedList.innerHTML = sortTasks(pinned).map(cardHTML).join("");
-          $activeList.innerHTML = sortTasks(active).map(cardHTML).join("");
-          $completedList.innerHTML = sortTasks(completed)
-            .map(cardHTML)
-            .join("");
-          [...document.querySelectorAll(".track")].forEach(bindSwipe);
-        });
-
+      
         await loadTasks(gUserId);
       }
-
-      bootstrap();
+      p();
     </script>
   </body>
 </html>
+
 
 
 
