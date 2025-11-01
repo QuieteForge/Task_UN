@@ -509,31 +509,23 @@
         );
       }
 
-      async function loadTasks() {
-        // 骨組み表示
-        $activeList.innerHTML =
-          '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
-        try {
-          const url = `${LIST_API_URL}?user_id=${encodeURIComponent(gUserId)}`;
-          const res = await fetch(url, {
-            headers: { Accept: "application/json" },
-          });
-          const data = await res.json();
-          // data が { pinned, active, completed } でも / フラット配列でも対応
-          if (Array.isArray(data)) gAllTasks = data;
-          else
-            gAllTasks = [
-              ...(data.pinned || []),
-              ...(data.active || []),
-              ...(data.completed || []),
-            ];
-          render();
-        } catch (e) {
-          console.error(e);
-          toast("読込エラー");
-          $activeList.innerHTML = "";
-        }
-      }
+      async function loadTasks(userId) {
+  const url = `https://lumicreate.xvps.jp/webhook/webhook-list?user_id=${encodeURIComponent(userId)}`;
+  const res = await fetch(url, {
+    method: 'GET',
+    credentials: 'omit',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const payload = await res.json();
+  if (!payload.ok) {
+    console.warn('API error', payload.error);
+    // ユーザーに「読み込みに失敗しました」を表示など
+    return;
+  }
+  const { pinned = [], active = [], completed = [] } = payload;
+  renderPinned(pinned); renderActive(active); renderCompleted(completed);
+}
+
 
       async function bootstrap() {
         // LIFF 初期化
@@ -576,4 +568,5 @@
     </script>
   </body>
 </html>
+
 
