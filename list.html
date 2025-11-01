@@ -252,362 +252,217 @@
     <div id="toast" class="toast"></div>
 
     <script>
-      // ---- global error to screen ----
-      window.addEventListener('error', e => {
-        const el = document.getElementById('debug');
-        if (el) el.textContent += `window.onerror: ${e.message}\n`;
-      });
-      window.addEventListener('unhandledrejection', e => {
-        const el = document.getElementById('debug');
-        if (el) el.textContent += `promise.reject: ${(e.reason && e.reason.message) || e.reason}\n`;
-      });
+/** =================== 設定 =================== */
+const LIST_API_URL   = "https://lumicreate.xvps.jp/webhook/webhook-list";
+const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action";
+/* LIFF ID は URLの ?liffId=... を最優先で使い、不在のときに固定IDを使う */
+const LIFF_ID = new URL(location.href).searchParams.get("liffId") || "2008311584-NdJqOqMn";
+/** ============================================ */
 
-      /** =================== 設定（差し替え） =================== */
-      const LIFF_ID = "2008311584-NdJqOqMn"; // ← あなたのLIFF ID
-      const LIST_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-list"; // ← n8n: LIST (GET) エンドポイント
-      const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action"; // ← n8n: ACTION (POST) エンドポイント
-      const ANON_FALLBACK = null; // 直接Supabaseを叩く場合の anon キー（通常は null のまま）
-      /** ======================================================== */
+/* 画面ログ */
+function dbg(...a){
+  const p = document.getElementById('debug');
+  if(!p) return;
+  p.textContent += a.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ') + '\n';
+}
+window.onerror = (m,s,l,c,e)=>{ dbg('window.onerror:', m, s+':'+l); };
+window.onunhandledrejection = (ev)=>{ dbg('unhandledrejection:', String(ev.reason||ev)); };
 
-      let gUserId = null;
-      let gAllTasks = [];
+let gUserId = null;
+let gAllTasks = [];
 
-      const el = (sel) => document.querySelector(sel);
-      const $pinned = el("#pinned");
-      const $pinnedList = el("#pinned-list");
-      const $activeList = el("#active-list");
-      const $completed = el("#completed");
-      const $completedList = el("#completed-list");
-      const $empty = el("#empty");
+const el = (sel) => document.querySelector(sel);
+const $pinned = el("#pinned");
+const $pinnedList = el("#pinned-list");
+const $activeList = el("#active-list");
+const $completed = el("#completed");
+const $completedList = el("#completed-list");
+const $empty = el("#empty");
 
-      function dbg(...a){ const el=document.getElementById('debug'); if(!el) return; el.textContent += a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' ') + '\n'; }
-
-      function toast(msg) {
-        const t = el("#toast");
-        t.textContent = msg;
-        t.classList.add("show");
-        setTimeout(() => t.classList.remove("show"), 1400);
-      }
-
-      function fmtJST(iso) {
-        if (!iso) return "";
-        const d = new Date(iso);
-        return d.toLocaleString("ja-JP", {
-          timeZone: "Asia/Tokyo",
-          month: "numeric",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-      }
-
-      // 並び順：期限昇順 → 優先度降順
-      function sortTasks(arr) {
-        return arr.slice().sort((a, b) => {
-          const ad = new Date(a.due_at || 0).getTime();
-          const bd = new Date(b.due_at || 0).getTime();
-          if (ad !== bd) return ad - bd; // 昇順
-          const ap = Number.isFinite(a.priority) ? a.priority : -1;
-          const bp = Number.isFinite(b.priority) ? b.priority : -1;
-          return bp - ap; // 降順
-        });
-      }
-
-      function splitByStatus(all) {
-        const now = Date.now();
-        const weekAgo = now - 7 * 24 * 3600 * 1000;
-        const pinned = [];
-        const active = [];
-        const completed = [];
-        for (const t of all) {
-          if (t.pinned) {
-            pinned.push(t);
-            continue;
-          }
-          if (t.status === "completed") {
-            const cAt = t.completed_at ? new Date(t.completed_at).getTime() : 0;
-            if (cAt >= weekAgo) completed.push(t);
-            continue;
-          }
-          if (t.status === "deleted" || t.status === "archived") continue;
-          active.push(t);
-        }
-        return { pinned: pinned.slice(0, 3), active, completed };
-      }
-
-      function render() {
-        dbg('render() in. items=', gAllTasks.length);
-        const { pinned, active, completed } = splitByStatus(gAllTasks);
-        const actSorted = sortTasks(active);
-        const pinSorted = sortTasks(pinned);
-        const compSorted = sortTasks(completed);
-
-        $pinned.hidden = pinSorted.length === 0;
-        $completed.hidden = compSorted.length === 0;
-
-        $pinnedList.innerHTML = pinSorted.map(cardHTML).join("");
-        $activeList.innerHTML = actSorted.map(cardHTML).join("");
-        $completedList.innerHTML = compSorted.map(cardHTML).join("");
-
-        $empty.hidden = pinSorted.length + actSorted.length > 0;
-
-        // スワイプをバインド
-        [...document.querySelectorAll(".track")].forEach(bindSwipe);
-        dbg('render() out: activeDom=', document.querySelectorAll('#active-list .card').length);
-        const lenText = `（debug）受信件数: ${gAllTasks.length}`;
-        document.querySelector('.title').textContent = 'LIST｜タスク （debug 受信件数: ' + gAllTasks.length + '）';
-
-      }
-
-      function cardHTML(t) {
-        const dueTxt = fmtJST(t.due_at);
-        const pin = t.pinned ? '<span class="pin">📌</span>' : "";
-        const ghost = t.status === "completed" ? " ghost" : "";
-        return `
-  <div class="swipe-wrap card${ghost}" data-id="${t.id}">
-    <div class="actions">
-      <div style="display:flex;gap:6px">
-        <button class="btn ok" data-act="complete">完了</button>
-        <button class="btn warn" data-act="remind">ﾘﾏｲﾝﾄﾞ</button>
-      </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn" data-act="pin">${
-          t.pinned ? "ピン解除" : "ピン"
-        }</button>
-        <button class="btn" data-act="detail">詳細</button>
-        <button class="btn danger" data-act="delete">削除</button>
-      </div>
+function toast(msg){
+  const t = el("#toast"); t.textContent = msg;
+  t.classList.add("show"); setTimeout(()=>t.classList.remove("show"), 1400);
+}
+function fmtJST(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString("ja-JP",{ timeZone:"Asia/Tokyo", month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" });
+}
+function sortTasks(arr){
+  return arr.slice().sort((a,b)=>{
+    const ad = new Date(a.due_at||0).getTime();
+    const bd = new Date(b.due_at||0).getTime();
+    if(ad!==bd) return ad-bd;
+    const ap = Number.isFinite(a.priority)?a.priority:-1;
+    const bp = Number.isFinite(b.priority)?b.priority:-1;
+    return bp-ap;
+  });
+}
+function splitByStatus(all){
+  const now = Date.now(), weekAgo = now - 7*24*3600*1000;
+  const pinned=[], active=[], completed=[];
+  for(const t of all){
+    if(t.pinned){ pinned.push(t); continue; }
+    if(t.status==='completed'){
+      const cAt = t.completed_at? new Date(t.completed_at).getTime():0;
+      if(cAt>=weekAgo) completed.push(t);
+      continue;
+    }
+    if(t.status==='deleted' || t.status==='archived') continue;
+    active.push(t);
+  }
+  return { pinned:pinned.slice(0,3), active, completed };
+}
+function cardHTML(t){
+  const dueTxt = fmtJST(t.due_at);
+  const pin = t.pinned ? '<span class="pin">📌</span>' : "";
+  const ghost = t.status==='completed'?' ghost':'';
+  return `
+<div class="swipe-wrap card${ghost}" data-id="${t.id}">
+  <div class="actions">
+    <div style="display:flex;gap:6px">
+      <button class="btn ok" data-act="complete">完了</button>
+      <button class="btn warn" data-act="remind">ﾘﾏｲﾝﾄﾞ</button>
     </div>
-    <div class="track">
-      <div class="row">
-        <div class="titleTxt">${pin}${escapeHTML(t.title || "(無題)")}</div>
-        <div class="meta"><span class="due">⏰ ${escapeHTML(dueTxt)}</span>${
-          Number.isFinite(t.priority)
-            ? `<span class="due">★${t.priority}</span>`
-            : ""
-        }</div>
-      </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn" data-act="pin">${t.pinned?'ピン解除':'ピン'}</button>
+      <button class="btn" data-act="detail">詳細</button>
+      <button class="btn danger" data-act="delete">削除</button>
     </div>
-  </div>`;
-      }
+  </div>
+  <div class="track">
+    <div class="row">
+      <div class="titleTxt">${pin}${escapeHTML(t.title||"(無題)")}</div>
+      <div class="meta"><span class="due">⏰ ${escapeHTML(dueTxt)}</span>${Number.isFinite(t.priority)?`<span class="due">★${t.priority}</span>`:""}</div>
+    </div>
+  </div>
+</div>`;
+}
+function escapeHTML(s){
+  return String(s||"").replace(/[&<>\"']/g,(c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+}
+function bindSwipe(track){
+  const wrap=track.parentElement, actions=wrap.querySelector(".actions");
+  const SW_LIGHT=40, SW_STRONG=120; let sx=0,dx=0,active=false;
+  const onStart=(x)=>{ active=true; sx=x; dx=0; track.style.transition="none"; };
+  const onMove=(x)=>{ if(!active) return; dx=x-sx; track.style.transform=`translateX(${dx}px)`; actions.style.opacity=Math.min(1,Math.abs(dx)/80); };
+  const onEnd=async()=>{ track.style.transition="transform .18s ease"; actions.style.opacity=0;
+    const id=wrap.dataset.id;
+    const act= dx>SW_STRONG?'complete' : dx<-SW_STRONG?'delete' : dx>SW_LIGHT?'pin' : dx<-SW_LIGHT?'menu' : null;
+    track.style.transform="translateX(0)"; dx=0; active=false;
+    if(!act) return; if(act==='menu'){ openActionSheet(wrap); return; } await runAction(id,act);
+  };
+  track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
+  track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
+  track.addEventListener("touchend", onEnd);
+  track.addEventListener("mousedown", e=>onStart(e.clientX));
+  track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX); });
+  track.addEventListener("mouseup", onEnd);
+}
+function openActionSheet(wrap){
+  const btns = wrap.querySelectorAll(".btn");
+  wrap.classList.add("highlight");
+  btns.forEach(b=>{
+    b.addEventListener("click", async(e)=>{
+      const id=wrap.dataset.id, act=e.currentTarget.dataset.act;
+      await runAction(id,act);
+    },{once:true});
+  });
+  setTimeout(()=>wrap.classList.remove("highlight"),1200);
+}
+async function runAction(id, action){
+  try{
+    if(action==='detail'){ alert('詳細は別画面へ（仮）'); return; }
+    if(action==='delete'){ if(!confirm('このタスクを削除しますか？')) return; }
+    const res = await fetch(ACTION_API_URL,{ method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ action, task_id:id, user_id:gUserId }) });
+    const j = await res.json().catch(()=>({ok:false}));
+    if(!res.ok || j.ok===false) throw new Error(j.message||'action failed');
+    toast(actionLabel(action)+'しました'); await loadTasks(gUserId);
+  }catch(err){ dbg(err.stack||String(err)); toast('エラー: '+(err.message||'failed')); }
+}
+function actionLabel(a){ return ({pin:'ピン', complete:'完了', delete:'削除', remind:'リマインド', menu:'メニュー'})[a] || a; }
 
-      function escapeHTML(s) {
-        return String(s || "").replace(
-          /[&<>"']/g,
-          (c) =>
-            ({
-              "&": "&amp;",
-              "<": "&lt;",
-              ">": "&gt;",
-              '"': "&quot;",
-              "'": "&#39;",
-            }[c])
-        );
-      }
+async function loadTasks(userId){
+  dbg('loadTasks userId=', userId);
+  if(!userId){
+    try{ const prof=await liff.getProfile(); userId=prof.userId; gUserId=userId; }
+    catch(e){ dbg('getProfile failed:', e.code||'', e.message||e); toast('ユーザー取得に失敗'); return; }
+  }
+  const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
+  dbg('GET', url);
+  let res, payload;
+  try{
+    res = await fetch(url, { method:'GET', credentials:'omit', headers:{'Content-Type':'application/json'} });
+    payload = await res.json();
+  }catch(e){
+    dbg('fetch/json error:', e.message||e); toast('読み込み失敗（通信/JSON）'); return;
+  }
+  dbg('status=', res.status, 'payload.ok=', payload && payload.ok);
+  if(!res.ok || !payload || payload.ok!==true){ toast('読み込み失敗（HTTP '+(res&&res.status)+')'); return; }
+  const pinned = Array.isArray(payload.pinned)?payload.pinned:[], active = Array.isArray(payload.active)?payload.active:[], completed = Array.isArray(payload.completed)?payload.completed:[];
+  gAllTasks = [...pinned, ...active, ...completed];
+  dbg('gAllTasks.length=', gAllTasks.length);
+  render();
+}
 
-      function bindSwipe(track) {
-        const wrap = track.parentElement; // .swipe-wrap
-        const actions = wrap.querySelector(".actions");
-        const SW_LIGHT = 40; // 軽く
-        const SW_STRONG = 120; // 大きく
-        let sx = 0,
-          dx = 0,
-          active = false;
+function render(){
+  dbg('render() in items=', gAllTasks.length);
+  const { pinned, active, completed } = splitByStatus(gAllTasks);
+  $pinned.hidden = pinned.length===0; $completed.hidden = completed.length===0;
+  $pinnedList.innerHTML   = sortTasks(pinned).map(cardHTML).join("");
+  $activeList.innerHTML   = sortTasks(active).map(cardHTML).join("");
+  $completedList.innerHTML= sortTasks(completed).map(cardHTML).join("");
+  $empty.hidden = (pinned.length + active.length) > 0;
+  [...document.querySelectorAll(".track")].forEach(bindSwipe);
+  document.querySelector('.title').textContent = 'LIST｜タスク （debug受信:'+gAllTasks.length+'件）';
+  dbg('render() out activeDom=', document.querySelectorAll('#active-list .card').length);
+}
 
-        const onStart = (x) => {
-          active = true;
-          sx = x;
-          dx = 0;
-          track.style.transition = "none";
-        };
-        const onMove = (x) => {
-          if (!active) return;
-          dx = x - sx;
-          track.style.transform = `translateX(${dx}px)`;
-          actions.style.opacity = Math.min(1, Math.abs(dx) / 80);
-        };
-        const onEnd = async () => {
-          track.style.transition = "transform .18s ease";
-          actions.style.opacity = 0;
-          const id = wrap.dataset.id;
-          const act =
-            dx > SW_STRONG
-              ? "complete"
-              : dx < -SW_STRONG
-              ? "delete"
-              : dx > SW_LIGHT
-              ? "pin"
-              : dx < -SW_LIGHT
-              ? "menu"
-              : null;
-          track.style.transform = "translateX(0)";
-          dx = 0;
-          active = false;
-          if (!act) return;
-          if (act === "menu") {
-            openActionSheet(wrap);
-            return;
-          }
-          await runAction(id, act);
-        };
+async function bootstrap(){
+  dbg('LIFF_ID=', LIFF_ID);
+  try{
+    await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
+    dbg('liff.init OK');
+  }catch(e){
+    dbg('liff.init ERROR:', e.code||'', e.message||e);
+    toast('LIFF初期化に失敗: '+(e.message||e));
+    return;
+  }
+  const ctx = liff.getContext?.(); dbg('context', ctx||{});
+  if(!liff.isLoggedIn()){ dbg('not logged-in -> login'); liff.login(); return; }
 
-        track.addEventListener(
-          "touchstart",
-          (e) => onStart(e.touches[0].clientX),
-          { passive: true }
-        );
-        track.addEventListener(
-          "touchmove",
-          (e) => onMove(e.touches[0].clientX),
-          { passive: true }
-        );
-        track.addEventListener("touchend", onEnd);
-        // マウス対応（開発時用）
-        track.addEventListener("mousedown", (e) => onStart(e.clientX));
-        track.addEventListener("mousemove", (e) => {
-          if (e.buttons === 1) onMove(e.clientX);
-        });
-        track.addEventListener("mouseup", onEnd);
-      }
+  try{
+    const prof = await liff.getProfile();
+    gUserId = prof.userId;
+    document.getElementById('user-pill').textContent = 'You: '+ gUserId.slice(-6);
+    dbg('profile OK userId=', gUserId);
+  }catch(e){
+    dbg('getProfile ERROR:', e.code||'', e.message||e);
+    toast('プロフィール取得に失敗'); return;
+  }
 
-      function openActionSheet(wrap) {
-        // 軽く左：リマインド/詳細/完了（モバイルの文脈でボタンを一時表示）
-        const btns = wrap.querySelectorAll(".btn");
-        wrap.classList.add("highlight");
-        btns.forEach((b) => {
-          b.addEventListener(
-            "click",
-            async (e) => {
-              const id = wrap.dataset.id;
-              const act = e.currentTarget.dataset.act;
-              await runAction(id, act);
-            },
-            { once: true }
-          );
-        });
-        setTimeout(() => wrap.classList.remove("highlight"), 1200);
-      }
+  document.getElementById('reload').onclick = ()=>loadTasks(gUserId);
+  document.getElementById('q').addEventListener('input', (e)=>{
+    const q = e.target.value.trim().toLowerCase();
+    if(!q){ render(); return; }
+    const filtered = gAllTasks.filter(t=>(t.title||'').toLowerCase().includes(q) || (t.detail||'').toLowerCase().includes(q));
+    const { pinned, active, completed } = splitByStatus(filtered);
+    $pinned.hidden = pinned.length===0; $completed.hidden = completed.length===0; $empty.hidden=true;
+    $pinnedList.innerHTML   = sortTasks(pinned).map(cardHTML).join("");
+    $activeList.innerHTML   = sortTasks(active).map(cardHTML).join("");
+    $completedList.innerHTML= sortTasks(completed).map(cardHTML).join("");
+    [...document.querySelectorAll(".track")].forEach(bindSwipe);
+  });
 
-      async function runAction(id, action) {
-        try {
-          if (action === "detail") {
-            alert("詳細は別画面へ遷移予定\n（ここでは簡易表示のみ）");
-            return;
-          }
-          if (action === "delete") {
-            const ok = confirm("このタスクを削除しますか？");
-            if (!ok) return;
-          }
-          const res = await fetch(ACTION_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, task_id: id, user_id: gUserId }),
-          });
-          const j = await res.json().catch(() => ({ ok: false }));
-          if (!res.ok || j.ok === false) {
-            throw new Error(j.message || "action failed");
-          }
-          toast(actionLabel(action) + "しました");
-          await loadTasks();
-        } catch (err) {
-          console.error(err);
-          toast("エラー: " + (err.message || "failed"));
-        }
-      }
+  await loadTasks(gUserId);
+}
 
-      function actionLabel(a) {
-        return (
-          {
-            pin: "ピン",
-            complete: "完了",
-            delete: "削除",
-            remind: "リマインド",
-            menu: "メニュー",
-          }[a] || a
-        );
-      }
+bootstrap();
+</script>
 
-      async function loadTasks(userId) {
-          dbg('loadTasks called with userId=', userId);
-          if (!userId) {
-            try {
-              const prof = await liff.getProfile();
-              userId = prof.userId;
-              gUserId = userId;
-              dbg('loadTasks got userId from profile=', userId);
-            } catch(e) {
-              dbg('loadTasks: cannot get userId:', e.message || e);
-              toast('ユーザー取得に失敗');
-              return;
-            }
-          }
-        
-          const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}&v=${Date.now()}`; // ★ キャッシュ殺し
-          dbg('GET', url);
-        
-          let res, payload, txt;
-          try {
-            res = await fetch(url, { method:'GET', credentials:'omit', headers:{'Accept':'application/json'} });
-            txt = await res.text();
-            dbg('status=', res.status, 'raw=', txt.slice(0,300));
-            try { payload = JSON.parse(txt); } catch { payload = null; }
-          } catch(e) {
-            dbg('fetch/json error:', e.message || e);
-            toast('読み込み失敗（通信/JSON）');
-            return;
-          }
-        
-          // 柔軟に解釈（ok が無くても data/active があれば使う）
-          let pinned = [], active = [], completed = [];
-          if (payload && payload.ok === true) {
-            pinned = Array.isArray(payload.pinned) ? payload.pinned : [];
-            active = Array.isArray(payload.active) ? payload.active : [];
-            completed = Array.isArray(payload.completed) ? payload.completed : [];
-          } else if (payload && Array.isArray(payload.data)) {
-            // 旧形式（配列そのもの or {data:[…]}) 対応
-            active = payload.data;
-          } else if (Array.isArray(payload)) {
-            active = payload;
-          } else {
-            dbg('unexpected payload shape');
-            toast('読み込み失敗（形式不正）');
-            return;
-          }
-        
-          gAllTasks = [...pinned, ...active, ...completed];
-          dbg('gAllTasks.length=', gAllTasks.length);
-          ();
-        }
-
-
-
-
-
-      async function bootstrap() {
-        // LIFF 初期化
-        await liff.init({ liffId: LIFF_ID });
-      
-        // ★ 初回は login() がリダイレクトするので、必ず return して以降を止める
-        if (!liff.isLoggedIn()) {
-          liff.login({ scope: ['openid','profile'] });
-          return;
-        }
-      
-        // ここに来ていればログイン済み
-        const prof = await liff.getProfile();
-        gUserId = prof.userId; // LINE userId
-        dbg('LIFF_ID=', LIFF_ID, ' userId=', gUserId);
-        document.getElementById("user-pill").textContent = "You: " + gUserId.slice(-6);
-      
-        // UI ハンドラ
-        document.getElementById("reload").onclick = () => loadTasks(gUserId);
-      
-        await loadTasks(gUserId);
-      }
-      p();
-    </script>
   </body>
 </html>
+
 
 
 
