@@ -253,8 +253,7 @@
       /** =================== 設定（差し替え） =================== */
       const LIFF_ID = "2008311584-NdJqOqMn"; // ← あなたのLIFF ID
       const LIST_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-list"; // ← n8n: LIST (GET) エンドポイント
-      const ACTION_API_URL =
-        "https://lumicreate.xvps.jp/webhook/1da80735-0b75-4974-97e0-a11bbbcc9eb8"; // ← n8n: ACTION (POST) エンドポイント
+      const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action"; // ← n8n: ACTION (POST) エンドポイント
       const ANON_FALLBACK = null; // 直接Supabaseを叩く場合の anon キー（通常は null のまま）
       /** ======================================================== */
 
@@ -510,21 +509,57 @@
       }
 
       async function loadTasks(userId) {
-  const url = `https://lumicreate.xvps.jp/webhook/webhook-list?user_id=${encodeURIComponent(userId)}`;
+  if (!userId) {
+    console.warn('loadTasks: userId is missing');
+    return;
+  }
+  const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
   const res = await fetch(url, {
     method: 'GET',
     credentials: 'omit',
     headers: { 'Content-Type': 'application/json' },
   });
-  const payload = await res.json();
-  if (!payload.ok) {
-    console.warn('API error', payload.error);
-    // ユーザーに「読み込みに失敗しました」を表示など
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch (e) {
+    console.error('JSON parse error', e);
+    toast('読み込み失敗（JSON）');
     return;
   }
-  const { pinned = [], active = [], completed = [] } = payload;
-  renderPinned(pinned); renderActive(active); renderCompleted(completed);
+
+  if (!res.ok) {
+    console.warn('HTTP error', res.status, payload);
+    toast('読み込み失敗（HTTP ' + res.status + '）');
+    return;
+  }
+
+  // APIの2パターンを吸収：
+  // A) {ok:true, data:[...]} 形式
+  // B) {ok:true, pinned:[...], active:[...], completed:[...]} 形式（あなたの現在の応答）
+  if (Array.isArray(payload)) {
+    gAllTasks = payload;
+  } else if (payload && payload.ok === true) {
+    if (Array.isArray(payload.data)) {
+      gAllTasks = payload.data;
+    } else if (payload.pinned || payload.active || payload.completed) {
+      const pinned = Array.isArray(payload.pinned) ? payload.pinned : [];
+      const active = Array.isArray(payload.active) ? payload.active : [];
+      const completed = Array.isArray(payload.completed) ? payload.completed : [];
+      gAllTasks = [...pinned, ...active, ...completed];
+    } else {
+      gAllTasks = [];
+    }
+  } else {
+    console.warn('API logical error', payload);
+    toast('読み込み失敗（API）');
+    return;
+  }
+
+  render();
 }
+
 
 
       async function bootstrap() {
@@ -537,7 +572,7 @@
           "You: " + gUserId.slice(-6);
 
         // UI ハンドラ
-        document.getElementById("reload").onclick = loadTasks;
+        document.getElementById("reload").onclick = () => loadTasks(gUserId);
         document.getElementById("q").addEventListener("input", (e) => {
           const q = e.target.value.trim().toLowerCase();
           if (!q) {
@@ -561,12 +596,13 @@
           [...document.querySelectorAll(".track")].forEach(bindSwipe);
         });
 
-        await loadTasks();
+        await loadTasks(gUserId);
       }
 
       bootstrap();
     </script>
   </body>
 </html>
+
 
 
