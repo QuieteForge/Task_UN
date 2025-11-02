@@ -210,16 +210,26 @@
       .toast.show {
         opacity: 1;
       }
-      /* --- swipe menu open state --- */
-      .swipe-wrap.menu .actions {
-        opacity: 1 !important;
-        pointer-events: auto !important;
+      /* メニューを展開した状態を固定表示 */
+      .swipe-wrap.menu .actions{
+        opacity:1 !important;
+        pointer-events:auto !important;
+      }
+      .swipe-wrap.menu .track{
+        transform:translateX(-96px); /* メニュー分だけ見せる */
+        transition:transform .18s ease;
       }
       
-      .swipe-wrap.menu .track {
-        transform: translateX(-80px);  /* メニュー分だけ左に寄せて見せる */
-        transition: transform .18s ease;
+      /* アクションがタップできるように */
+      .actions{
+        transition:opacity .15s ease;
+        z-index:2;          /* トラックより前面 */
       }
+      .track{
+        position:relative;
+        z-index:1;
+      }
+
 
     </style>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -324,55 +334,60 @@ function splitByStatus(all){
   }
   return { pinned:pinned.slice(0,3), active, completed };
 }
-function cardHTML(t){
+function cardHTML(t) {
   const dueTxt = fmtJST(t.due_at);
   const pin = t.pinned ? '<span class="pin">📌</span>' : "";
-  const ghost = t.status==='completed'?' ghost':'';
+  const ghost = t.status === "completed" ? " ghost" : "";
   return `
-<div class="swipe-wrap card${ghost}" data-id="${t.id}">
-  <div class="actions">
-    <div style="display:flex;gap:6px">
-      <button class="btn ok" data-act="complete">完了</button>
-      <button class="btn warn" data-act="remind">ﾘﾏｲﾝﾄﾞ</button>
+  <div class="swipe-wrap card${ghost}" data-id="${t.id}" data-status="${t.status || 'active'}">
+    <div class="actions">
+      <div style="display:flex;gap:6px">
+        <button class="btn ok"    data-act="complete">完了</button>
+        <button class="btn warn"  data-act="remind">ﾘﾏｲﾝﾄﾞ</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn"        data-act="pin">${t.pinned ? "ピン解除" : "ピン"}</button>
+        <button class="btn"        data-act="detail">詳細</button>
+        <button class="btn danger" data-act="delete">削除</button>
+      </div>
     </div>
-    <div style="display:flex;gap:6px">
-      <button class="btn" data-act="pin">${t.pinned?'ピン解除':'ピン'}</button>
-      <button class="btn" data-act="detail">詳細</button>
-      <button class="btn danger" data-act="delete">削除</button>
+    <div class="track">
+      <div class="row">
+        <div class="titleTxt">${pin}${escapeHTML(t.title || "(無題)")}</div>
+        <div class="meta"><span class="due">⏰ ${escapeHTML(dueTxt)}</span>${
+          Number.isFinite(t.priority) ? `<span class="due">★${t.priority}</span>` : ""
+        }</div>
+      </div>
     </div>
-  </div>
-  <div class="track">
-    <div class="row">
-      <div class="titleTxt">${pin}${escapeHTML(t.title||"(無題)")}</div>
-      <div class="meta"><span class="due">⏰ ${escapeHTML(dueTxt)}</span>${Number.isFinite(t.priority)?`<span class="due">★${t.priority}</span>`:""}</div>
-    </div>
-  </div>
-</div>`;
+  </div>`;
 }
+
 function escapeHTML(s){
   return String(s||"").replace(/[&<>\"']/g,(c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
 }
 function bindSwipe(track) {
-  const wrap = track.parentElement; // .swipe-wrap
+  const wrap    = track.parentElement;          // .swipe-wrap
   const actions = wrap.querySelector(".actions");
 
   // しきい値
-  const SW_MENU = 36;     // 「軽く」左 → メニューを出す
-  const SW_ACTION = 120;  // 「強く」左右 → 直接アクション
+  const SW_MENU   = 36;   // 軽く：メニュー開閉 or ピン
+  const SW_ACTION = 120;  // 強く：確定アクション（削除/完了/取消）
 
-  let sx = 0, dx = 0, active = false, menuOpen = false;
+  let sx = 0, dx = 0, active = false;
 
-  // いまこのカードのメニューが開いているかを class で覚える
   const isMenuOpen = () => wrap.classList.contains('menu');
-  const openMenu = () => {
-    wrap.classList.add('menu');
-    actions.style.opacity = 1;
-  };
-  const closeMenu = () => {
-    wrap.classList.remove('menu');
-    actions.style.opacity = 0;
-    track.style.transform = "translateX(0)";
-  };
+  const openMenu   = () => { closeAllMenus(); wrap.classList.add('menu'); actions.style.opacity = 1; };
+  const closeMenu  = () => { wrap.classList.remove('menu'); actions.style.opacity = 0; track.style.transform = "translateX(0)"; };
+
+  function closeAllMenus(){
+    document.querySelectorAll('.swipe-wrap.menu').forEach(w=>{
+      w.classList.remove('menu');
+      const act = w.querySelector('.actions');
+      const trk = w.querySelector('.track');
+      if (act) act.style.opacity = 0;
+      if (trk) trk.style.transform = 'translateX(0)';
+    });
+  }
 
   const onStart = (x) => {
     active = true;
@@ -385,16 +400,13 @@ function bindSwipe(track) {
     if (!active) return;
     dx = x - sx;
 
-    // メニュー表示中は軽いスワイプで閉じる操作に充てる
+    // メニュー展開中：右に少し引いたら閉じる
     if (isMenuOpen()) {
-      // 右方向に少し引いたら閉じる
-      if (dx > 16) {
-        closeMenu();
-      }
-      return; // メニュー展開中はトラック移動しない
+      if (dx > 16) closeMenu();
+      return;
     }
 
-    // 通常時は指の移動に合わせてスライド表示(左右)
+    // 通常：指に追従
     track.style.transform = `translateX(${dx}px)`;
     actions.style.opacity = Math.min(1, Math.abs(dx) / 80);
   };
@@ -402,64 +414,54 @@ function bindSwipe(track) {
   const onEnd = async () => {
     track.style.transition = "transform .18s ease";
 
-    // メニュー表示中で、ほぼ動いていなければ（=タップで外した等）閉じるだけ
+    // メニュー開いてる→タップっぽければ閉じるだけ
     if (isMenuOpen()) {
-      if (Math.abs(dx) < 12) { closeMenu(); }
-      active = false; dx = 0;
-      return;
+      if (Math.abs(dx) < 12) closeMenu();
+      active = false; dx = 0; return;
     }
 
-    // 決定ロジック
+    // 決定
     let act = null;
     if (dx <= -SW_ACTION) {
-      // 強く左 → 削除
-      act = "delete";
-    } else if (dx >= SW_ACTION) {
-      // 強く右 → 完了
-      act = "complete";
+      act = "delete";                         // 強く左＝削除
+    } else if (dx >=  SW_ACTION) {
+      // 強く右＝完了／完了取消（トグル）
+      const status = wrap.dataset.status || 'active';
+      act = (status === 'completed') ? "uncomplete" : "complete";
     } else if (dx <= -SW_MENU) {
-      // 軽く左 → メニューを開く（削除しない）
-      openMenu();
-    } else if (dx >= SW_MENU) {
-      // 軽く右 → ピン切替
-      act = "pin";
+      openMenu();                             // 軽く左＝メニュー開く
+    } else if (dx >=  SW_MENU) {
+      act = "pin";                            // 軽く右＝ピン
     }
 
-    // 位置を戻す（メニュー時は openMenu 内で固定する）
+    // 戻す（メニューは openMenu 内で固定）
     if (!isMenuOpen()) {
       track.style.transform = "translateX(0)";
       actions.style.opacity = 0;
     }
 
-    // 状態リセット
     const id = wrap.dataset.id;
     active = false;
-    const dxCopy = dx;
     dx = 0;
 
-    // メニューを開いただけならここで終了
     if (!act) return;
 
-    // アクション実行（完了/削除/ピン）
     try {
       await runAction(id, act);
     } catch (e) {
       console.error(e);
       toast("エラー: " + (e.message || "failed"));
-      // 失敗時は何もしない（位置は戻してある）
       return;
     }
   };
 
-  // メニュー内ボタンにイベントを一度だけ張る
-  // （“軽く左”で出るボタン群：data-act="pin|detail|delete|remind"）
-  const btns = wrap.querySelectorAll(".btn");
-  btns.forEach((b) => {
+  // メニュー内ボタン
+  wrap.querySelectorAll(".btn").forEach((b) => {
     b.addEventListener("click", async (e) => {
-      const id = wrap.dataset.id;
+      const id  = wrap.dataset.id;
       const act = e.currentTarget.dataset.act;
-      // すぐ閉じてから実行（意図しない連打を避ける）
       closeMenu();
+
       if (act === "detail") {
         alert("詳細は別画面へ遷移予定\n（ここでは簡易表示のみ）");
         return;
@@ -468,38 +470,52 @@ function bindSwipe(track) {
         const ok = confirm("このタスクを削除しますか？");
         if (!ok) return;
       }
-      try {
-        await runAction(id, act);
-      } catch (err) {
-        console.error(err);
-        toast("エラー: " + (err.message || "failed"));
-      }
+      try { await runAction(id, act); }
+      catch(err){ console.error(err); toast("エラー: " + (err.message || "failed")); }
     });
   });
 
-  // タッチ/マウス イベント
-  //（スマホは passive: true でスクロール阻害を避ける）
-  track.addEventListener("touchstart", (e) => onStart(e.touches[0].clientX), { passive: true });
-  track.addEventListener("touchmove",  (e) => onMove(e.touches[0].clientX),  { passive: true });
+  // タッチ/マウス
+  track.addEventListener("touchstart", (e)=>onStart(e.touches[0].clientX), { passive:true });
+  track.addEventListener("touchmove",  (e)=>onMove(e.touches[0].clientX),  { passive:true });
   track.addEventListener("touchend", onEnd);
 
-  // 開発時のマウス操作（PCブラウザ）
-  track.addEventListener("mousedown", (e) => onStart(e.clientX));
-  track.addEventListener("mousemove", (e) => { if (e.buttons === 1) onMove(e.clientX); });
+  track.addEventListener("mousedown", (e)=>onStart(e.clientX));
+  track.addEventListener("mousemove", (e)=>{ if (e.buttons === 1) onMove(e.clientX); });
   track.addEventListener("mouseup", onEnd);
+
+  // 画面タップで他カードのメニューを閉じる
+  document.addEventListener('click', (e)=>{
+    if (!wrap.contains(e.target)) closeAllMenus();
+  });
 }
 
-async function runAction(id, action){
-  try{
-    if(action==='detail'){ alert('詳細は別画面へ（仮）'); return; }
-    if(action==='delete'){ if(!confirm('このタスクを削除しますか？')) return; }
-    const res = await fetch(ACTION_API_URL,{ method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ action, task_id:id, user_id:gUserId }) });
-    const j = await res.json().catch(()=>({ok:false}));
-    if(!res.ok || j.ok===false) throw new Error(j.message||'action failed');
-    toast(actionLabel(action)+'しました'); await loadTasks(gUserId);
-  }catch(err){ dbg(err.stack||String(err)); toast('エラー: '+(err.message||'failed')); }
+
+function actionLabel(a){
+  return ({ pin:"ピン", complete:"完了", uncomplete:"取消", delete:"削除", remind:"リマインド", menu:"メニュー" }[a] || a);
 }
-function actionLabel(a){ return ({pin:'ピン', complete:'完了', delete:'削除', remind:'リマインド', menu:'メニュー'})[a] || a; }
+
+async function runAction(id, action) {
+  try {
+    if (action === "detail") { alert("詳細は別画面へ遷移予定"); return; }
+    if (action === "delete") { const ok = confirm("このタスクを削除しますか？"); if (!ok) return; }
+
+    // 通常通り Webhook へ
+    const res = await fetch(ACTION_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, task_id: id, user_id: gUserId }),
+    });
+    const j = await res.json().catch(()=>({ok:false}));
+    if (!res.ok || j.ok === false) throw new Error(j.message || "action failed");
+
+    toast(actionLabel(action) + "しました");
+    await loadTasks(gUserId);
+  } catch (err) {
+    console.error(err);
+    toast("エラー: " + (err.message || "failed"));
+  }
+}
 
 async function loadTasks(userId){
   dbg('loadTasks userId=', userId);
@@ -532,7 +548,7 @@ async function loadTasks(userId){
       $completed.hidden= completed.length === 0;
     
       // HTML 差し込み（ここは例外起きにくい）
-      $pinnedList.innerHTML    = sortTasks(pinned).map(cardHTML).join("");
+      $pinnedList.innerHTML    = sortTasks(pinned).map(TML).join("");
       $activeList.innerHTML    = sortTasks(active).map(cardHTML).join("");
       $completedList.innerHTML = sortTasks(completed).map(cardHTML).join("");
       $empty.hidden = (pinned.length + active.length) > 0;
@@ -603,6 +619,7 @@ bootstrap();
 
   </body>
 </html>
+
 
 
 
