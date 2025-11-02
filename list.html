@@ -26,15 +26,13 @@
     .section{margin:18px 0}
     .section h3{margin:8px 6px 10px; font-size:13px; color:var(--sub); font-weight:600}
 
-    /* カード&スワイプ */
-    .card-wrap{
-      position:relative; margin:10px 0; border-radius:16px; overflow:visible;
-    }
+    .card-wrap{position:relative; margin:10px 0; border-radius:16px; overflow:visible}
+
     /* アクション面（初期は完全に見えない） */
     .actions{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
       padding:0 8px; opacity:0; pointer-events:none; transition:opacity .15s ease;
-      z-index:0; /* track(=カード)の下層に配置して透け防止 */
+      z-index:0;
     }
     .card-wrap.open-left .actions,
     .card-wrap.open-right .actions{ opacity:1; pointer-events:auto; }
@@ -54,6 +52,7 @@
       background:var(--card); border:1px solid var(--line); border-radius:16px;
       box-shadow:0 1px 0 rgba(0,0,0,.03);
       padding:12px 14px; transform:translateX(0); transition:transform .18s ease;
+      /* ここは pan-y のままでOK。軸ロック時にpreventDefaultで横を強制 */
       touch-action:pan-y;
     }
     .ghost{opacity:.45}
@@ -70,22 +69,19 @@
     .toolbar button{padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#fff}
 
     /* 詳細パネル */
-    .detail{
-      border-top:1px dashed var(--line); margin-top:10px; padding-top:10px; display:none;
-    }
+    .detail{border-top:1px dashed var(--line); margin-top:10px; padding-top:10px; display:none; position:relative}
     .detail.open{display:block}
-    .detail-grid{
-      display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:6px;
-    }
+    .detail-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px}
     .detail label{font-size:12px; color:var(--sub)}
     .detail textarea,.detail input,.detail select{
       width:100%; padding:8px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:14px;
     }
     .detail .row-btns{display:flex; gap:8px; justify-content:flex-end; margin-top:8px}
     .detail .close-x{
-      position:absolute; top:10px; right:12px; width:26px; height:26px; border-radius:50%;
+      position:absolute; top:-6px; right:-6px; width:26px; height:26px; border-radius:50%;
       border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center;
       font-weight:700; cursor:pointer;
+      box-shadow:0 1px 2px rgba(0,0,0,.06);
     }
 
     .toast{position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111; color:#fff;
@@ -161,17 +157,13 @@
   /** 並び順：ピン → 優先度(降) → 期限(昇) → その他 */
   function sortCombined(arr){
     return arr.slice().sort((a,b)=>{
-      // 1) pinned desc
       if(a.pinned !== b.pinned) return (b.pinned?1:0)-(a.pinned?1:0);
-      // 2) priority desc (nullは最後)
       const ap = isFiniteNum(a.priority) ? a.priority : -1;
       const bp = isFiniteNum(b.priority) ? b.priority : -1;
       if(ap !== bp) return bp - ap;
-      // 3) due_at asc (nullは最後)
       const ad = a.due_at ? new Date(a.due_at).getTime() : Number.POSITIVE_INFINITY;
       const bd = b.due_at ? new Date(b.due_at).getTime() : Number.POSITIVE_INFINITY;
       if(ad !== bd) return ad - bd;
-      // 4) title asc
       const at = (a.title||"").toLowerCase(), bt=(b.title||"").toLowerCase();
       if(at < bt) return -1; if(at > bt) return 1; return 0;
     });
@@ -255,12 +247,10 @@
     const pad = n=>String(n).padStart(2,"0");
     const yyyy = d.getFullYear(), mm=pad(d.getMonth()+1), dd=pad(d.getDate()),
           hh = pad(d.getHours()), mi=pad(d.getMinutes());
-    // input[type=datetime-local] はローカル時刻で受ける
     return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
   }
   function fromLocalDatetimeValue(val){
     if(!val) return null;
-    // ローカルをそのまま解析→UTC ISOへ
     const d = new Date(val);
     return d.toISOString();
   }
@@ -279,32 +269,29 @@
     $activeList.innerHTML = acts.map(cardHTML).join("");
     $completedList.innerHTML = comps.map(cardHTML).join("");
 
-    // スワイプとボタンをバインド
     [...document.querySelectorAll(".card-wrap")].forEach(bindSwipeAndButtons);
-    // カードタップで詳細開閉（track領域）
     [...document.querySelectorAll(".track")].forEach(bindTapToDetail);
 
-    // タイトルに件数表示
     document.querySelector(".title").textContent = `LIST｜タスク（${pins.length+acts.length}）`;
   }
 
-  /** ===== スワイプ実装 =====
-   * 軽いスワイプ→SNAP_Xまでスナップ固定、ボタン露出・タップ可
-   * 速い/大きいスワイプ → 即時実行（左=完了 / 右=削除）
-   */
-  const SNAP_X = 96;         // 露出位置（ボタンがしっかり見える）
-  const FULL_X = 164;        // これ以上は即時実行候補
-  const V_FULL = 0.6;        // px/ms 以上の速度で即時実行
-  const TAP_MAX_MOVE = 6;    // これ以下ならタップ
+  /** ===== スワイプ実装（軸ロック入り） ===== */
+  // 露出位置/閾値：少し下げて露出しやすく
+  const SNAP_X = 84;          // スナップ露出(px)
+  const FULL_X = 148;         // これ以上 or 高速なら即時実行
+  const V_FULL = 0.55;        // px/ms 以上で即実行
+  const TAP_MAX_MOVE = 6;     // タップ許容移動
+  const AXIS_LOCK_SLOP = 6;   // 軸判定の遊び
 
   function bindSwipeAndButtons(wrap){
     const track = wrap.querySelector(".track");
     const leftBtns = wrap.querySelector(".left-actions");
     const rightBtns= wrap.querySelector(".right-actions");
-    let sx=0, dx=0, ts=0, dragging=false, moved=false;
 
-    // 他が開いていたら閉じる
-    const closeAll = ()=>{
+    let sx=0, sy=0, dx=0, dy=0, ts=0;
+    let dragging=false, moved=false, locked=null; // 'x' or 'y' or null
+
+    const closePrevSide = ()=>{
       if(gOpenSideId && gOpenSideId!==wrap.dataset.id){
         const ww = document.querySelector(`.card-wrap[data-id="${gOpenSideId}"]`);
         if(ww) settleTo(ww, 0);
@@ -312,15 +299,28 @@
       gOpenSideId = null;
     };
 
-    const onStart = (clientX)=>{
-      dragging=true; moved=false; sx=clientX; dx=0; ts=performance.now();
+    const onStart = (x,y)=>{
+      dragging=true; moved=false; locked=null;
+      sx=x; sy=y; dx=0; dy=0; ts=performance.now();
       track.style.transition="none";
     };
-    const onMove = (clientX)=>{
+    const onMove = (x,y,evt)=>{
       if(!dragging) return;
-      dx = clientX - sx;
-      if(Math.abs(dx)>1) moved=true;
-      // 抵抗：大きく引き過ぎない
+      dx = x - sx; dy = y - sy;
+      if(!moved && (Math.abs(dx)>1 || Math.abs(dy)>1)) moved=true;
+
+      if(!locked){
+        if(Math.abs(dx) > Math.abs(dy)+AXIS_LOCK_SLOP) locked='x';
+        else if(Math.abs(dy) > Math.abs(dx)+AXIS_LOCK_SLOP) locked='y';
+      }
+      if(locked==='y'){
+        // 縦スクロール優先：カードは動かさない
+        return;
+      }
+      if(locked==='x' && evt && typeof evt.preventDefault==='function'){
+        evt.preventDefault(); // 横操作にロック
+      }
+
       const shown = clamp(dx, -FULL_X-40, FULL_X-40);
       track.style.transform = `translateX(${shown}px)`;
     };
@@ -328,50 +328,53 @@
       if(!dragging) return;
       dragging=false;
       track.style.transition="transform .18s ease";
-      const dt = Math.max(1, performance.now()-ts);
-      const v = dx/dt; // px/ms
-      const absdx = Math.abs(dx);
 
-      // タップ扱い
-      if(!moved || Math.abs(dx)<=TAP_MAX_MOVE){
-        // 既存の開きがあれば閉じる、なければ詳細をトグルは「bindTapToDetail」で処理
+      // 縦にロックされていた場合→何もしない（元の位置を維持）
+      if(locked==='y'){ 
+        // 露出していたら閉じる
         settleTo(wrap, 0);
         return;
       }
 
-      // 即時実行の判定（速度 or 量）
+      const dt = Math.max(1, performance.now()-ts);
+      const v = dx/dt;
+
+      // タップ扱い
+      if(!moved || Math.abs(dx)<=TAP_MAX_MOVE){
+        settleTo(wrap, 0);
+        return;
+      }
+
+      // 即時実行（速度 or 距離）
       if(dx >= FULL_X || v>=V_FULL){
-        // 左大→完了
         settleTo(wrap, 0);
         onAction(wrap,"complete");
         return;
       }
       if(dx <= -FULL_X || v<=-V_FULL){
-        // 右大→削除（確認）
         settleTo(wrap, 0);
         confirmDelete(wrap);
         return;
       }
 
-      // スナップ：軽い露出で固定
+      // スナップ固定（ボタン露出）
       if(dx > SNAP_X){
-        settleTo(wrap, SNAP_X); // 左露出（完了・ピン）
+        settleTo(wrap, SNAP_X);
         wrap.classList.add("open-left"); wrap.classList.remove("open-right");
-        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id);
+        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id); closePrevSide();
         return;
       }
       if(dx < -SNAP_X){
-        settleTo(wrap, -SNAP_X); // 右露出（詳細・削除）
+        settleTo(wrap, -SNAP_X);
         wrap.classList.add("open-right"); wrap.classList.remove("open-left");
-        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id);
+        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id); closePrevSide();
         return;
       }
 
-      // しきい値未満→元へ
+      // 小さい動き→戻す
       settleTo(wrap, 0);
     };
 
-    // クリックで各ボタン動作
     leftBtns.addEventListener("click", (e)=>{
       const b = e.target.closest(".btn"); if(!b) return;
       const act = b.dataset.act;
@@ -387,16 +390,14 @@
       settleTo(wrap,0);
     });
 
-    // pointer/touch/mouse
-    track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
-    track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
-    track.addEventListener("touchend", onEnd);
-    track.addEventListener("mousedown", e=>onStart(e.clientX));
-    track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX) });
-    track.addEventListener("mouseup", onEnd);
+    // === touch/mouse ===
+    track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX, e.touches[0].clientY), {passive:false});
+    track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX, e.touches[0].clientY, e), {passive:false});
+    track.addEventListener("touchend", onEnd, {passive:false});
 
-    // 他の露出を閉じる
-    track.addEventListener("pointerdown", closeAll);
+    track.addEventListener("mousedown", e=>onStart(e.clientX, e.clientY));
+    track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX, e.clientY, e) });
+    track.addEventListener("mouseup", onEnd);
   }
 
   function settleTo(wrap, x){
@@ -415,7 +416,6 @@
     const id = wrap.dataset.id;
     try{
       if(action==="detail"){ openDetail(id,true); return; }
-      // 「未完了⇔完了」切替は complete / uncomplete の2系統にしてます
       if(action==="uncomplete"){
         await postAction("complete-undo",{task_id:id,user_id:gUserId});
         toast("完了を取り消しました");
@@ -437,17 +437,13 @@
   }
 
   function bindTapToDetail(track){
-    // タップ（クリック）時に詳細開閉（露出してたら閉じるだけ）
-    track.addEventListener("click",(e)=>{
-      // ボタン類はここに来ないが、露出状態なら閉じる優先
-      const wrap = track.closest(".card-wrap");
+    const wrap = track.closest(".card-wrap");
+    track.addEventListener("click",()=>{
       if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
         settleTo(wrap,0); return;
       }
       openDetail(wrap.dataset.id, true);
     });
-    // 閉じる×、閉じるボタン、保存ボタン
-    const wrap = track.closest(".card-wrap");
     const det = wrap.querySelector(".detail");
     det.querySelector("[data-close]")?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
     det.querySelector('[data-act="detail-cancel"]')?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
@@ -468,7 +464,6 @@
   }
 
   async function saveDetail(id){
-    // detail / priority / due_at / remind_times[0]
     const det = el(`#detail-${id}`); if(!det) return;
     const fields = {};
     const vDetail = det.querySelector('[data-field="detail"]').value.trim();
@@ -513,7 +508,6 @@
     const payload = await res.json();
     if(!res.ok || !payload || payload.ok!==true){ toast("読み込み失敗"); return; }
 
-    // 返却：{pinned,active,completed}
     const pinned = Array.isArray(payload.pinned)?payload.pinned:[];
     const active = Array.isArray(payload.active)?payload.active:[];
     const completed = Array.isArray(payload.completed)?payload.completed:[];
@@ -529,7 +523,6 @@
     gUserId = prof.userId;
     el("#user-pill").textContent = "You: " + gUserId.slice(-6);
 
-    // 検索
     el("#q").addEventListener("input",(e)=>{
       const q = e.target.value.trim().toLowerCase();
       if(!q){ render(); return; }
@@ -541,7 +534,6 @@
       $pinned.hidden = pinned.length===0;
       $completed.hidden = completed.length===0;
       $empty.hidden = pinned.length + active.length > 0;
-
       $pinnedList.innerHTML = sortCombined(pinned).map(cardHTML).join("");
       $activeList.innerHTML = sortCombined(active).map(cardHTML).join("");
       $completedList.innerHTML = sortCombined(completed).map(cardHTML).join("");
