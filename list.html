@@ -28,19 +28,18 @@
 
     .card-wrap{position:relative; margin:10px 0; border-radius:16px; overflow:visible}
 
-    /* アクション面（初期は完全に見えない） */
+    /* アクション面（初期は不可視/非活性。ドラッグ距離で不透明度UP→スナップで完全表示） */
     .actions{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
-      padding:0 8px; opacity:0; pointer-events:none; transition:opacity .15s ease;
+      padding:0 8px; opacity:0; pointer-events:none; transition:opacity .12s linear;
       z-index:0;
     }
-    .card-wrap.open-left .actions,
-    .card-wrap.open-right .actions{ opacity:1; pointer-events:auto; }
     .left-actions{display:flex; gap:6px; padding-left:8px}
     .right-actions{display:flex; gap:6px; padding-right:8px}
     .btn{
       pointer-events:auto; padding:8px 10px; border-radius:10px; border:1px solid var(--line);
-      background:#fff; font-size:12px; user-select:none;
+      background:#fff; font-size:12px; user-select:none; white-space:nowrap;
+      min-width:68px;
     }
     .btn.ok{ border-color:#c7ecd1; color:var(--ok); background:var(--actL) }
     .btn.warn{ border-color:#fde68a; color:var(--warn); background:#fffbeb }
@@ -52,7 +51,6 @@
       background:var(--card); border:1px solid var(--line); border-radius:16px;
       box-shadow:0 1px 0 rgba(0,0,0,.03);
       padding:12px 14px; transform:translateX(0); transition:transform .18s ease;
-      /* ここは pan-y のままでOK。軸ロック時にpreventDefaultで横を強制 */
       touch-action:pan-y;
     }
     .ghost{opacity:.45}
@@ -132,8 +130,8 @@
   /** ===== 状態 ===== */
   let gUserId = null;
   let gAllTasks = [];
-  let gOpenDetailId = null; // 詳細は同時に1つだけ
-  let gOpenSideId = null;   // スナップ（左/右）も同時に1つだけ
+  let gOpenDetailId = null;
+  let gOpenSideId = null;
 
   /** ===== util ===== */
   const el = s => document.querySelector(s);
@@ -154,7 +152,7 @@
   }
   const isFiniteNum = v => Number.isFinite(v);
 
-  /** 並び順：ピン → 優先度(降) → 期限(昇) → その他 */
+  /** 並び順：ピン → 優先度(降) → 期限(昇) → タイトル */
   function sortCombined(arr){
     return arr.slice().sort((a,b)=>{
       if(a.pinned !== b.pinned) return (b.pinned?1:0)-(a.pinned?1:0);
@@ -270,40 +268,47 @@
     $completedList.innerHTML = comps.map(cardHTML).join("");
 
     [...document.querySelectorAll(".card-wrap")].forEach(bindSwipeAndButtons);
-    [...document.querySelectorAll(".track")].forEach(bindTapToDetail);
+    [...document.querySelectorAll(".track")].forEach(bindDetailButtons);
 
     document.querySelector(".title").textContent = `LIST｜タスク（${pins.length+acts.length}）`;
   }
 
-  /** ===== スワイプ実装（軸ロック入り） ===== */
-  // 露出位置/閾値：少し下げて露出しやすく
-  const SNAP_X = 84;          // スナップ露出(px)
-  const FULL_X = 148;         // これ以上 or 高速なら即時実行
-  const V_FULL = 0.55;        // px/ms 以上で即実行
-  const TAP_MAX_MOVE = 6;     // タップ許容移動
+  /** ===== スワイプ実装（ボタン幅“実測”でスナップ距離決定） ===== */
+  const TAP_MAX_MOVE = 6;     // タップ判定の許容移動
   const AXIS_LOCK_SLOP = 6;   // 軸判定の遊び
+  const EXTRA_PAD = 14;       // ボタン群の左右余白
+  const FULL_MARGIN = 36;     // スナップよりさらに進んだらフリックなしでも即実行
+  const V_FULL = 0.58;        // px/ms 以上で即実行（前回より気持ち強め）
 
   function bindSwipeAndButtons(wrap){
     const track = wrap.querySelector(".track");
+    const actions = wrap.querySelector(".actions");
     const leftBtns = wrap.querySelector(".left-actions");
     const rightBtns= wrap.querySelector(".right-actions");
 
-    let sx=0, sy=0, dx=0, dy=0, ts=0;
-    let dragging=false, moved=false, locked=null; // 'x' or 'y' or null
+    // ★ ここで幅を実測 → カード毎に最適スナップ距離
+    const { snapL, snapR, fullL, fullR } = measureSnaps(leftBtns, rightBtns);
 
-    const closePrevSide = ()=>{
-      if(gOpenSideId && gOpenSideId!==wrap.dataset.id){
+    let sx=0, sy=0, dx=0, dy=0, ts=0;
+    let dragging=false, moved=false, locked=null; // 'x' or 'y'
+    let justDragged=false;
+
+    const closeOtherOpenSides = (currentId)=>{
+      if(!gOpenSideId) return;
+      if(gOpenSideId !== currentId){
         const ww = document.querySelector(`.card-wrap[data-id="${gOpenSideId}"]`);
         if(ww) settleTo(ww, 0);
       }
-      gOpenSideId = null;
     };
 
     const onStart = (x,y)=>{
       dragging=true; moved=false; locked=null;
       sx=x; sy=y; dx=0; dy=0; ts=performance.now();
       track.style.transition="none";
+      // 初動で薄っすら見えるように0→少し
+      actions.style.opacity = 0;
     };
+
     const onMove = (x,y,evt)=>{
       if(!dragging) return;
       dx = x - sx; dy = y - sy;
@@ -313,81 +318,91 @@
         if(Math.abs(dx) > Math.abs(dy)+AXIS_LOCK_SLOP) locked='x';
         else if(Math.abs(dy) > Math.abs(dx)+AXIS_LOCK_SLOP) locked='y';
       }
-      if(locked==='y'){
-        // 縦スクロール優先：カードは動かさない
-        return;
-      }
-      if(locked==='x' && evt && typeof evt.preventDefault==='function'){
-        evt.preventDefault(); // 横操作にロック
-      }
+      if(locked==='y'){ return; }
+      if(locked==='x' && evt && typeof evt.preventDefault==='function') evt.preventDefault();
 
-      const shown = clamp(dx, -FULL_X-40, FULL_X-40);
+      // 表示位置 & アクションの見え方
+      const shown = clamp(dx, -fullR-20, fullL-20);
       track.style.transform = `translateX(${shown}px)`;
+
+      // 距離に応じて不透明度を上げる（ドラッグ中にボタンが見える）
+      const opa = Math.min(1, Math.max(Math.abs(shown)/Math.min(snapL, snapR), 0));
+      actions.style.opacity = opa;
+
+      // クラスでどちら側が開きかの状態も乗せておく（見た目用）
+      if(shown>0){ wrap.classList.add("open-left"); wrap.classList.remove("open-right"); }
+      else if(shown<0){ wrap.classList.add("open-right"); wrap.classList.remove("open-left"); }
+      else { wrap.classList.remove("open-left","open-right"); }
     };
+
     const onEnd = ()=>{
       if(!dragging) return;
       dragging=false;
       track.style.transition="transform .18s ease";
 
-      // 縦にロックされていた場合→何もしない（元の位置を維持）
-      if(locked==='y'){ 
-        // 露出していたら閉じる
-        settleTo(wrap, 0);
+      const wasDrag = moved && Math.abs(dx) > TAP_MAX_MOVE;
+      if(wasDrag){ justDragged = true; setTimeout(()=>{ justDragged=false; }, 260); }
+
+      // クリック扱い
+      if(!wasDrag){
+        // スナップを開いている時はまず閉じる
+        if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
+          settleTo(wrap,0, actions);
+          return;
+        }
+        openDetail(wrap.dataset.id, true);
         return;
       }
 
       const dt = Math.max(1, performance.now()-ts);
       const v = dx/dt;
 
-      // タップ扱い
-      if(!moved || Math.abs(dx)<=TAP_MAX_MOVE){
-        settleTo(wrap, 0);
-        return;
-      }
-
       // 即時実行（速度 or 距離）
-      if(dx >= FULL_X || v>=V_FULL){
-        settleTo(wrap, 0);
+      if(dx >= fullL || v>=V_FULL){
+        settleTo(wrap, 0, actions);
         onAction(wrap,"complete");
         return;
       }
-      if(dx <= -FULL_X || v<=-V_FULL){
-        settleTo(wrap, 0);
+      if(dx <= -fullR || v<=-V_FULL){
+        settleTo(wrap, 0, actions);
         confirmDelete(wrap);
         return;
       }
 
-      // スナップ固定（ボタン露出）
-      if(dx > SNAP_X){
-        settleTo(wrap, SNAP_X);
-        wrap.classList.add("open-left"); wrap.classList.remove("open-right");
-        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id); closePrevSide();
+      // スナップ固定（ボタン完全露出 ＋ クリック可）
+      if(dx > snapL){
+        settleTo(wrap, snapL, actions, 1);
+        closeOtherOpenSides(wrap.dataset.id);
+        gOpenSideId = wrap.dataset.id;
+        closeOtherDetails(wrap.dataset.id);
         return;
       }
-      if(dx < -SNAP_X){
-        settleTo(wrap, -SNAP_X);
-        wrap.classList.add("open-right"); wrap.classList.remove("open-left");
-        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id); closePrevSide();
+      if(dx < -snapR){
+        settleTo(wrap, -snapR, actions, 1);
+        closeOtherOpenSides(wrap.dataset.id);
+        gOpenSideId = wrap.dataset.id;
+        closeOtherDetails(wrap.dataset.id);
         return;
       }
 
       // 小さい動き→戻す
-      settleTo(wrap, 0);
+      settleTo(wrap, 0, actions);
     };
 
+    // ボタン押下
     leftBtns.addEventListener("click", (e)=>{
       const b = e.target.closest(".btn"); if(!b) return;
       const act = b.dataset.act;
       if(act==="complete"){ onAction(wrap,"complete"); }
       else if(act==="pin"){ onAction(wrap,"pin"); }
-      settleTo(wrap,0);
+      settleTo(wrap,0, actions);
     });
     rightBtns.addEventListener("click", (e)=>{
       const b = e.target.closest(".btn"); if(!b) return;
       const act = b.dataset.act;
       if(act==="detail"){ openDetail(wrap.dataset.id,true); }
       else if(act==="delete"){ confirmDelete(wrap); }
-      settleTo(wrap,0);
+      settleTo(wrap,0, actions);
     });
 
     // === touch/mouse ===
@@ -398,12 +413,50 @@
     track.addEventListener("mousedown", e=>onStart(e.clientX, e.clientY));
     track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX, e.clientY, e) });
     track.addEventListener("mouseup", onEnd);
+
+    // ドラッグ直後の合成クリックを抑止
+    track.addEventListener("click",(e)=>{
+      if(justDragged){ e.stopPropagation(); e.preventDefault(); return; }
+      if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
+        settleTo(wrap,0, actions); return;
+      }
+      openDetail(wrap.dataset.id, true);
+    });
   }
 
-  function settleTo(wrap, x){
+  function bindDetailButtons(track){
+    const wrap = track.closest(".card-wrap");
+    const det = wrap.querySelector(".detail");
+    det.querySelector("[data-close]")?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
+    det.querySelector('[data-act="detail-cancel"]')?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
+    det.querySelector('[data-act="detail-save"]')?.addEventListener("click",()=>saveDetail(wrap.dataset.id));
+  }
+
+  function measureSnaps(leftBtns, rightBtns){
+    // 画面に描画済みなので実測できる
+    const l = leftBtns.getBoundingClientRect().width;
+    const r = rightBtns.getBoundingClientRect().width;
+    // ボタン群+余白分だけ確実に露出（最小110, 最大240の範囲で丸め）
+    const snapL = clamp(Math.round(l + EXTRA_PAD), 110, 240);
+    const snapR = clamp(Math.round(r + EXTRA_PAD), 110, 240);
+    // “さらに進んだら” 即実行（前より少し余裕）
+    const fullL = snapL + FULL_MARGIN;
+    const fullR = snapR + FULL_MARGIN;
+    return { snapL, snapR, fullL, fullR };
+  }
+
+  function settleTo(wrap, x, actions, forceOpacity){
     const track = wrap.querySelector(".track");
     track.style.transform = `translateX(${x}px)`;
-    if(x===0){ wrap.classList.remove("open-left","open-right"); }
+    if(x===0){
+      wrap.classList.remove("open-left","open-right");
+      if(actions) actions.style.opacity = 0;
+      if(gOpenSideId === wrap.dataset.id) gOpenSideId = null;
+    }else{
+      if(actions) actions.style.opacity = (typeof forceOpacity==='number' ? forceOpacity : 1);
+      if(x>0) { wrap.classList.add("open-left"); wrap.classList.remove("open-right"); }
+      else { wrap.classList.add("open-right"); wrap.classList.remove("open-left"); }
+    }
   }
   function clamp(v,min,max){ return Math.min(max, Math.max(min,v)); }
 
@@ -434,20 +487,6 @@
       console.error(e);
       toast("エラー: "+(e.message||"failed"));
     }
-  }
-
-  function bindTapToDetail(track){
-    const wrap = track.closest(".card-wrap");
-    track.addEventListener("click",()=>{
-      if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
-        settleTo(wrap,0); return;
-      }
-      openDetail(wrap.dataset.id, true);
-    });
-    const det = wrap.querySelector(".detail");
-    det.querySelector("[data-close]")?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
-    det.querySelector('[data-act="detail-cancel"]')?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
-    det.querySelector('[data-act="detail-save"]')?.addEventListener("click",()=>saveDetail(wrap.dataset.id));
   }
 
   function closeOtherDetails(keepId){
@@ -538,7 +577,7 @@
       $activeList.innerHTML = sortCombined(active).map(cardHTML).join("");
       $completedList.innerHTML = sortCombined(completed).map(cardHTML).join("");
       [...document.querySelectorAll(".card-wrap")].forEach(bindSwipeAndButtons);
-      [...document.querySelectorAll(".track")].forEach(bindTapToDetail);
+      [...document.querySelectorAll(".track")].forEach(bindDetailButtons);
     });
     el("#reload").onclick = () => loadTasks(gUserId);
 
