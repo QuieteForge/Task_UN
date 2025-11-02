@@ -20,7 +20,7 @@ h3{margin:10px 6px;color:var(--sub);font-size:13px}
 .ghost{opacity:.45}
 
 /* swipe */
-.swipe-wrap{position:relative;overflow:hidden;border-radius:16px}
+.swipe-wrap{position:relative;overflow:hidden;border-radius:16px;touch-action:pan-y}
 .actions{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 8px;opacity:0;pointer-events:none;transition:opacity .15s}
 .swipe-wrap.menu .actions{opacity:1;pointer-events:auto}
 .swipe-wrap.menu .track{transform:translateX(-96px)}
@@ -28,7 +28,7 @@ h3{margin:10px 6px;color:var(--sub);font-size:13px}
 .btn.ok{border-color:#c7ecd1;color:var(--ok);background:#ecfdf5}
 .btn.warn{border-color:#fde68a;color:var(--warn);background:#fffbeb}
 .btn.danger{border-color:#fecaca;color:var(--danger);background:#fef2f2}
-.track{position:relative;z-index:1;transition:transform .18s ease}
+.track{position:relative;z-index:1;transition:transform .18s ease;will-change:transform}
 
 .empty{color:var(--sub);text-align:center;padding:36px 12px}
 .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.25s}
@@ -46,79 +46,186 @@ h3{margin:10px 6px;color:var(--sub);font-size:13px}
 <div id="toast" class="toast"></div>
 
 <script>
+/* ===== 設定 ===== */
 const LIFF_ID="2008311584-NdJqOqMn";
 const LIST_API_URL="https://lumicreate.xvps.jp/webhook/webhook-list";
 const ACTION_API_URL="https://lumicreate.xvps.jp/webhook/webhook-action";
+
+/* ===== 状態 ===== */
 let gUserId=null,gAll=[];
 
+/* ===== ユーティリティ ===== */
 const $=s=>document.querySelector(s);
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1500);}
 function esc(s){return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function fmt(iso){if(!iso)return"";const d=new Date(iso);return d.toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});}
+
+/* ===== DOM描画 ===== */
 function cardHTML(t){
- const left=t.status==="completed"?
- `<button class='btn ok' data-act='uncomplete'>取消</button>`:`<button class='btn ok' data-act='complete'>完了</button>`;
+ const leftSide = t.status==="completed"
+   ? `<button class='btn ok' data-act='uncomplete'>取消</button>`
+   : `<button class='btn ok' data-act='complete'>完了</button>`;
  return `
  <div class="swipe-wrap card${t.status==="completed"?" ghost":""}" data-id="${t.id}" data-status="${t.status||'active'}">
   <div class="actions">
-   <div>${left}</div>
-   <div><button class='btn' data-act='pin'>ピン</button><button class='btn danger' data-act='delete'>削除</button></div>
+   <div>${leftSide}</div>
+   <div>
+     <button class='btn' data-act='pin'>ピン</button>
+     <button class='btn danger' data-act='delete'>削除</button>
+   </div>
   </div>
-  <div class="track"><div class="row">
-   <div class="titleTxt">${t.pinned?"📌":""}${esc(t.title||"(無題)")}</div>
-   <div class="meta">${fmt(t.due_at)}</div>
-  </div></div>
+  <div class="track">
+    <div class="row">
+      <div class="titleTxt">${t.pinned?"📌":""}${esc(t.title||"(無題)")}</div>
+      <div class="meta">${fmt(t.due_at)}</div>
+    </div>
+  </div>
  </div>`;
 }
+
 function render(){
  const active=gAll.filter(t=>t.status!=="completed"&&t.status!=="deleted");
  const completed=gAll.filter(t=>t.status==="completed");
  $("#active-list").innerHTML=active.map(cardHTML).join("");
  $("#completed-list").innerHTML=completed.map(cardHTML).join("");
  $("#completed").hidden=completed.length===0;
- $("#empty").hidden=gAll.length>0;
+ $("#empty").hidden=(active.length+completed.length)>0;
  document.querySelectorAll(".track").forEach(bindSwipe);
 }
+
+/* ===== データロード/アクション ===== */
 async function load(){
- const res=await fetch(`${LIST_API_URL}?user_id=${gUserId}`);const j=await res.json();
- gAll=j.data||[...(j.active||[]),...(j.completed||[])];render();
+ const res=await fetch(`${LIST_API_URL}?user_id=${encodeURIComponent(gUserId)}`);
+ const j=await res.json();
+ gAll = j.data || [...(j.pinned||[]), ...(j.active||[]), ...(j.completed||[])];
+ render();
 }
+
 async function runAction(id,act){
- if(act==="delete"&&!confirm("このタスクを削除しますか？"))return;
+ if(act==="delete"){
+   const yes = confirm("このタスクを削除しますか？");
+   if(!yes) return;
+ }
  const body={action:act,task_id:id,user_id:gUserId};
  const res=await fetch(ACTION_API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
  const j=await res.json().catch(()=>({ok:false}));
- if(!res.ok||!j.ok){toast("失敗");return;}
- toast(act==="uncomplete"?"完了取消":"完了しました");
+ if(!res.ok||!j.ok){toast("失敗しました");return;}
+ toast(
+   act==="uncomplete" ? "完了を取り消しました" :
+   act==="complete"   ? "完了しました" :
+   act==="pin"        ? "ピンを切り替えました" :
+   act==="delete"     ? "削除しました" : "OK"
+ );
  await load();
 }
+
+/* ===== スワイプ制御 =====
+ 右：強スワイプのみ完了/取消
+ 左：軽い → メニュー表示、強い → 削除（確認あり）
+*/
 function bindSwipe(track){
  const wrap=track.parentElement,actions=wrap.querySelector(".actions");
- const SW_MENU=36,SW_ACTION=140;let sx=0,dx=0,active=false;
- const isOpen=()=>wrap.classList.contains("menu");
- const open=()=>{closeAll();wrap.classList.add("menu");actions.style.opacity=1;};
- const close=()=>{wrap.classList.remove("menu");actions.style.opacity=0;track.style.transform="translateX(0)";};
- function closeAll(){document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{w.classList.remove("menu");w.querySelector(".track").style.transform="translateX(0)";w.querySelector(".actions").style.opacity=0;});}
- const start=x=>{active=true;sx=x;dx=0;track.style.transition="none";};
- const move=x=>{if(!active)return;dx=x-sx;if(isOpen()){if(dx>16)close();return;}track.style.transform=`translateX(${dx}px)`;actions.style.opacity=Math.min(1,Math.abs(dx)/80);};
- const end=async()=>{track.style.transition="transform .18s ease";if(isOpen()){if(Math.abs(dx)<12)close();active=false;dx=0;return;}
- let act=null;if(dx<=-SW_ACTION)act="delete";else if(dx>=SW_ACTION)act=(wrap.dataset.status==="completed")?"uncomplete":"complete";else if(dx<=-SW_MENU)open();
- if(!isOpen()){track.style.transform="translateX(0)";actions.style.opacity=0;}
- if(!act){active=false;return;}await runAction(wrap.dataset.id,act);active=false;dx=0;};
- wrap.querySelectorAll(".btn").forEach(b=>b.onclick=()=>runAction(wrap.dataset.id,b.dataset.act));
- track.addEventListener("touchstart",e=>start(e.touches[0].clientX),{passive:true});
- track.addEventListener("touchmove",e=>move(e.touches[0].clientX),{passive:true});
- track.addEventListener("touchend",end);
- track.addEventListener("mousedown",e=>start(e.clientX));
- track.addEventListener("mousemove",e=>{if(e.buttons===1)move(e.clientX);});
- track.addEventListener("mouseup",end);
- document.addEventListener("click",e=>{if(!wrap.contains(e.target))closeAll();});
+
+ // しきい値（必要なら微調整）
+ const SW_DEAD=28;     // これ以下は何もしない
+ const SW_MENU=40;     // 左にこれ以上でメニュー
+ const SW_ACTION=150;  // 強スワイプ閾値（左右共通）
+
+ let sx=0,dx=0,drag=false;
+
+ const isOpen = ()=> wrap.classList.contains("menu");
+ const open   = ()=> { closeAll(); wrap.classList.add("menu"); actions.style.opacity=1; track.style.transform="translateX(-96px)"; };
+ const close  = ()=> { wrap.classList.remove("menu"); actions.style.opacity=0; track.style.transform="translateX(0)"; };
+ function closeAll(){
+   document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{
+     w.classList.remove("menu");
+     const tr=w.querySelector(".track"); const ac=w.querySelector(".actions");
+     tr.style.transform="translateX(0)"; ac.style.opacity=0;
+   });
+ }
+
+ // ボタンはクリック優先
+ wrap.querySelectorAll(".btn").forEach(b=>{
+   b.addEventListener("click",e=>{
+     e.stopPropagation();
+     runAction(wrap.dataset.id, b.dataset.act);
+   });
+ });
+
+ const onStart = x => { drag=true; sx=x; dx=0; track.style.transition="none"; };
+ const onMove  = x => {
+   if(!drag) return;
+   dx = x - sx;
+
+   // メニューが開いてる時は「右に少し」なら閉じるジェスチャのみにする
+   if(isOpen()){
+     if(dx>16){ close(); }
+     return; // メニュー表示中はカードを自由に動かさない
+   }
+
+   // 右小スワイプは何も起きないが、視覚的に少し動かすと誤操作誘発するので最小限
+   // 左小スワイプはメニューのプレビューとして軽く動かす
+   const preview = Math.max(-96, Math.min(24, dx)); // 右に大きくは動かさない
+   track.style.transform = `translateX(${preview}px)`;
+   actions.style.opacity = Math.min(1, Math.abs(preview)/80);
+ };
+ const onEnd   = async () => {
+   track.style.transition="transform .18s ease";
+
+   // メニュー開いてるなら、指を離したらそのまま維持（右に強く戻した時だけ閉じるのは onMove で対応）
+   if(isOpen()){ track.style.transform="translateX(-96px)"; actions.style.opacity=1; drag=false; return; }
+
+   const dist = dx;
+   let act=null;
+
+   if (dist >= SW_ACTION) {
+     // 強い右：完了/取消
+     act = (wrap.dataset.status==="completed") ? "uncomplete" : "complete";
+   } else if (dist <= -SW_ACTION) {
+     // 強い左：削除（後で confirm。ここでは act 指定だけ）
+     act = "delete";
+   } else if (dist <= -SW_MENU) {
+     // 軽い左：メニュー
+     open();
+   } else if (Math.abs(dist) <= SW_DEAD) {
+     // 何もしない
+   }
+
+   // 位置を戻す
+   if(!isOpen()){ track.style.transform="translateX(0)"; actions.style.opacity=0; }
+
+   // 実行
+   if(act){
+     if(act==="delete"){
+       // 強い左は必ず確認
+       const yes = confirm("このタスクを削除しますか？");
+       if(!yes){ drag=false; dx=0; return; }
+     }
+     await runAction(wrap.dataset.id, act);
+   }
+
+   drag=false; dx=0;
+ };
+
+ // マウス/タッチ両対応
+ track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
+ track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
+ track.addEventListener("touchend",  onEnd);
+ track.addEventListener("touchcancel", onEnd);
+
+ track.addEventListener("mousedown",e=>onStart(e.clientX));
+ track.addEventListener("mousemove",e=>{ if(e.buttons===1) onMove(e.clientX); });
+ track.addEventListener("mouseup",onEnd);
+
+ // カード外タップで他のメニューは閉じる
+ document.addEventListener("click",e=>{ if(!wrap.contains(e.target)) closeAll(); });
 }
 
+/* ===== 起動 ===== */
 (async()=>{
  await liff.init({liffId:LIFF_ID});
- if(!liff.isLoggedIn())liff.login();
- const prof=await liff.getProfile();gUserId=prof.userId;
+ if(!liff.isLoggedIn()) liff.login();
+ const prof=await liff.getProfile(); gUserId=prof.userId;
  $("#user-pill").textContent="ID:"+gUserId.slice(-5);
  await load();
 })();
