@@ -210,6 +210,17 @@
       .toast.show {
         opacity: 1;
       }
+      /* --- swipe menu open state --- */
+      .swipe-wrap.menu .actions {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+      }
+      
+      .swipe-wrap.menu .track {
+        transform: translateX(-80px);  /* メニュー分だけ左に寄せて見せる */
+        transition: transform .18s ease;
+      }
+
     </style>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   </head>
@@ -341,51 +352,143 @@ function cardHTML(t){
 function escapeHTML(s){
   return String(s||"").replace(/[&<>\"']/g,(c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
 }
-function bindSwipe(track){
-  if (!track) return;                    // ★null guard
-  const wrap = track.parentElement;
-  const actions = wrap && wrap.querySelector(".actions");
-  if (!wrap || !actions) return;         // ★null guard
+function bindSwipe(track) {
+  const wrap = track.parentElement; // .swipe-wrap
+  const actions = wrap.querySelector(".actions");
 
-  const SW_LIGHT = 40, SW_STRONG = 120;
-  let sx = 0, dx = 0, active = false;
+  // しきい値
+  const SW_MENU = 36;     // 「軽く」左 → メニューを出す
+  const SW_ACTION = 120;  // 「強く」左右 → 直接アクション
 
-  const onStart = (x) => { active = true; sx = x; dx = 0; track.style.transition = "none"; };
-  const onMove  = (x) => { if (!active) return; dx = x - sx; track.style.transform = `translateX(${dx}px)`; if (actions) actions.style.opacity = Math.min(1, Math.abs(dx)/80); };
-  const onEnd   = async () => {
-    track.style.transition = "transform .18s ease";
-    if (actions) actions.style.opacity = 0;
-    const id  = wrap.dataset.id;
-    const act = dx > SW_STRONG ? "complete" :
-                dx < -SW_STRONG ? "delete" :
-                dx > SW_LIGHT  ? "pin"     :
-                dx < -SW_LIGHT ? "menu"    : null;
+  let sx = 0, dx = 0, active = false, menuOpen = false;
+
+  // いまこのカードのメニューが開いているかを class で覚える
+  const isMenuOpen = () => wrap.classList.contains('menu');
+  const openMenu = () => {
+    wrap.classList.add('menu');
+    actions.style.opacity = 1;
+  };
+  const closeMenu = () => {
+    wrap.classList.remove('menu');
+    actions.style.opacity = 0;
     track.style.transform = "translateX(0)";
-    dx = 0; active = false;
-    if (!act) return;
-    if (act === "menu") { openActionSheet(wrap); return; }
-    await runAction(id, act);
   };
 
-  track.addEventListener("touchstart", e => onStart(e.touches[0].clientX), { passive:true });
-  track.addEventListener("touchmove",  e => onMove(e.touches[0].clientX),   { passive:true });
-  track.addEventListener("touchend",   onEnd);
-  track.addEventListener("mousedown",  e => onStart(e.clientX));
-  track.addEventListener("mousemove",  e => { if (e.buttons === 1) onMove(e.clientX); });
-  track.addEventListener("mouseup",    onEnd);
+  const onStart = (x) => {
+    active = true;
+    sx = x;
+    dx = 0;
+    track.style.transition = "none";
+  };
+
+  const onMove = (x) => {
+    if (!active) return;
+    dx = x - sx;
+
+    // メニュー表示中は軽いスワイプで閉じる操作に充てる
+    if (isMenuOpen()) {
+      // 右方向に少し引いたら閉じる
+      if (dx > 16) {
+        closeMenu();
+      }
+      return; // メニュー展開中はトラック移動しない
+    }
+
+    // 通常時は指の移動に合わせてスライド表示(左右)
+    track.style.transform = `translateX(${dx}px)`;
+    actions.style.opacity = Math.min(1, Math.abs(dx) / 80);
+  };
+
+  const onEnd = async () => {
+    track.style.transition = "transform .18s ease";
+
+    // メニュー表示中で、ほぼ動いていなければ（=タップで外した等）閉じるだけ
+    if (isMenuOpen()) {
+      if (Math.abs(dx) < 12) { closeMenu(); }
+      active = false; dx = 0;
+      return;
+    }
+
+    // 決定ロジック
+    let act = null;
+    if (dx <= -SW_ACTION) {
+      // 強く左 → 削除
+      act = "delete";
+    } else if (dx >= SW_ACTION) {
+      // 強く右 → 完了
+      act = "complete";
+    } else if (dx <= -SW_MENU) {
+      // 軽く左 → メニューを開く（削除しない）
+      openMenu();
+    } else if (dx >= SW_MENU) {
+      // 軽く右 → ピン切替
+      act = "pin";
+    }
+
+    // 位置を戻す（メニュー時は openMenu 内で固定する）
+    if (!isMenuOpen()) {
+      track.style.transform = "translateX(0)";
+      actions.style.opacity = 0;
+    }
+
+    // 状態リセット
+    const id = wrap.dataset.id;
+    active = false;
+    const dxCopy = dx;
+    dx = 0;
+
+    // メニューを開いただけならここで終了
+    if (!act) return;
+
+    // アクション実行（完了/削除/ピン）
+    try {
+      await runAction(id, act);
+    } catch (e) {
+      console.error(e);
+      toast("エラー: " + (e.message || "failed"));
+      // 失敗時は何もしない（位置は戻してある）
+      return;
+    }
+  };
+
+  // メニュー内ボタンにイベントを一度だけ張る
+  // （“軽く左”で出るボタン群：data-act="pin|detail|delete|remind"）
+  const btns = wrap.querySelectorAll(".btn");
+  btns.forEach((b) => {
+    b.addEventListener("click", async (e) => {
+      const id = wrap.dataset.id;
+      const act = e.currentTarget.dataset.act;
+      // すぐ閉じてから実行（意図しない連打を避ける）
+      closeMenu();
+      if (act === "detail") {
+        alert("詳細は別画面へ遷移予定\n（ここでは簡易表示のみ）");
+        return;
+      }
+      if (act === "delete") {
+        const ok = confirm("このタスクを削除しますか？");
+        if (!ok) return;
+      }
+      try {
+        await runAction(id, act);
+      } catch (err) {
+        console.error(err);
+        toast("エラー: " + (err.message || "failed"));
+      }
+    });
+  });
+
+  // タッチ/マウス イベント
+  //（スマホは passive: true でスクロール阻害を避ける）
+  track.addEventListener("touchstart", (e) => onStart(e.touches[0].clientX), { passive: true });
+  track.addEventListener("touchmove",  (e) => onMove(e.touches[0].clientX),  { passive: true });
+  track.addEventListener("touchend", onEnd);
+
+  // 開発時のマウス操作（PCブラウザ）
+  track.addEventListener("mousedown", (e) => onStart(e.clientX));
+  track.addEventListener("mousemove", (e) => { if (e.buttons === 1) onMove(e.clientX); });
+  track.addEventListener("mouseup", onEnd);
 }
 
-function openActionSheet(wrap){
-  const btns = wrap.querySelectorAll(".btn");
-  wrap.classList.add("highlight");
-  btns.forEach(b=>{
-    b.addEventListener("click", async(e)=>{
-      const id=wrap.dataset.id, act=e.currentTarget.dataset.act;
-      await runAction(id,act);
-    },{once:true});
-  });
-  setTimeout(()=>wrap.classList.remove("highlight"),1200);
-}
 async function runAction(id, action){
   try{
     if(action==='detail'){ alert('詳細は別画面へ（仮）'); return; }
@@ -500,6 +603,7 @@ bootstrap();
 
   </body>
 </html>
+
 
 
 
