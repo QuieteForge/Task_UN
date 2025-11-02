@@ -28,7 +28,7 @@
 
     .card-wrap{position:relative; margin:10px 0; border-radius:16px; overflow:visible}
 
-    /* アクション面（初期は完全不可視） */
+    /* アクション面（初期は完全に見えない） */
     .actions{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
       padding:0 8px; opacity:0; pointer-events:none; transition:opacity .15s ease;
@@ -52,6 +52,7 @@
       background:var(--card); border:1px solid var(--line); border-radius:16px;
       box-shadow:0 1px 0 rgba(0,0,0,.03);
       padding:12px 14px; transform:translateX(0); transition:transform .18s ease;
+      /* ここは pan-y のままでOK。軸ロック時にpreventDefaultで横を強制 */
       touch-action:pan-y;
     }
     .ghost{opacity:.45}
@@ -274,11 +275,12 @@
     document.querySelector(".title").textContent = `LIST｜タスク（${pins.length+acts.length}）`;
   }
 
-  /** ===== スワイプ実装（軸ロック＋ドラッグ後クリック無効化） ===== */
-  const SNAP_X = 84;          // ボタン露出のスナップ距離
-  const FULL_X = 148;         // これ以上 or 高速なら即実行
+  /** ===== スワイプ実装（軸ロック入り） ===== */
+  // 露出位置/閾値：少し下げて露出しやすく
+  const SNAP_X = 84;          // スナップ露出(px)
+  const FULL_X = 148;         // これ以上 or 高速なら即時実行
   const V_FULL = 0.55;        // px/ms 以上で即実行
-  const TAP_MAX_MOVE = 6;     // タップ判定の許容移動
+  const TAP_MAX_MOVE = 6;     // タップ許容移動
   const AXIS_LOCK_SLOP = 6;   // 軸判定の遊び
 
   function bindSwipeAndButtons(wrap){
@@ -288,15 +290,13 @@
 
     let sx=0, sy=0, dx=0, dy=0, ts=0;
     let dragging=false, moved=false, locked=null; // 'x' or 'y' or null
-    let justDragged=false; // ★ドラッグ直後の合成クリックを殺す
 
-    const closeOtherOpenSides = (currentId)=>{
-      if(!gOpenSideId) return;
-      if(gOpenSideId !== currentId){
+    const closePrevSide = ()=>{
+      if(gOpenSideId && gOpenSideId!==wrap.dataset.id){
         const ww = document.querySelector(`.card-wrap[data-id="${gOpenSideId}"]`);
         if(ww) settleTo(ww, 0);
       }
-      // 自分を開いたときは gOpenSideId を上書きし、ここではクリアしない
+      gOpenSideId = null;
     };
 
     const onStart = (x,y)=>{
@@ -313,7 +313,10 @@
         if(Math.abs(dx) > Math.abs(dy)+AXIS_LOCK_SLOP) locked='x';
         else if(Math.abs(dy) > Math.abs(dx)+AXIS_LOCK_SLOP) locked='y';
       }
-      if(locked==='y'){ return; }
+      if(locked==='y'){
+        // 縦スクロール優先：カードは動かさない
+        return;
+      }
       if(locked==='x' && evt && typeof evt.preventDefault==='function'){
         evt.preventDefault(); // 横操作にロック
       }
@@ -326,25 +329,21 @@
       dragging=false;
       track.style.transition="transform .18s ease";
 
-      const wasDrag = moved && Math.abs(dx) > TAP_MAX_MOVE;
-      if(wasDrag){
-        justDragged = true;
-        setTimeout(()=>{ justDragged=false; }, 280); // 合成clickを1回スルー
-      }
-
-      if(locked==='y'){
+      // 縦にロックされていた場合→何もしない（元の位置を維持）
+      if(locked==='y'){ 
+        // 露出していたら閉じる
         settleTo(wrap, 0);
-        return;
-      }
-
-      // タップ扱い（移動ほぼなし）
-      if(!wasDrag){
-        // クリックハンドラ側で処理
         return;
       }
 
       const dt = Math.max(1, performance.now()-ts);
       const v = dx/dt;
+
+      // タップ扱い
+      if(!moved || Math.abs(dx)<=TAP_MAX_MOVE){
+        settleTo(wrap, 0);
+        return;
+      }
 
       // 即時実行（速度 or 距離）
       if(dx >= FULL_X || v>=V_FULL){
@@ -362,17 +361,13 @@
       if(dx > SNAP_X){
         settleTo(wrap, SNAP_X);
         wrap.classList.add("open-left"); wrap.classList.remove("open-right");
-        closeOtherOpenSides(wrap.dataset.id);
-        gOpenSideId = wrap.dataset.id;
-        closeOtherDetails(wrap.dataset.id);
+        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id); closePrevSide();
         return;
       }
       if(dx < -SNAP_X){
         settleTo(wrap, -SNAP_X);
         wrap.classList.add("open-right"); wrap.classList.remove("open-left");
-        closeOtherOpenSides(wrap.dataset.id);
-        gOpenSideId = wrap.dataset.id;
-        closeOtherDetails(wrap.dataset.id);
+        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id); closePrevSide();
         return;
       }
 
@@ -403,32 +398,12 @@
     track.addEventListener("mousedown", e=>onStart(e.clientX, e.clientY));
     track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX, e.clientY, e) });
     track.addEventListener("mouseup", onEnd);
-
-    // ★ドラッグ直後の合成クリックを抑止
-    track.addEventListener("click",(e)=>{
-      if(justDragged){
-        e.stopPropagation();
-        e.preventDefault();
-        return;
-      }
-      // スナップを開いている時にカード面をクリック → まず閉じるだけ
-      if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
-        settleTo(wrap,0);
-        return;
-      }
-      // それ以外は詳細を開く
-      openDetail(wrap.dataset.id, true);
-    });
   }
 
   function settleTo(wrap, x){
     const track = wrap.querySelector(".track");
     track.style.transform = `translateX(${x}px)`;
-    if(x===0){
-      wrap.classList.remove("open-left","open-right");
-      // 自分を閉じたら、開き状態IDも必要ならクリア
-      if(gOpenSideId === wrap.dataset.id) gOpenSideId = null;
-    }
+    if(x===0){ wrap.classList.remove("open-left","open-right"); }
   }
   function clamp(v,min,max){ return Math.min(max, Math.max(min,v)); }
 
@@ -463,6 +438,12 @@
 
   function bindTapToDetail(track){
     const wrap = track.closest(".card-wrap");
+    track.addEventListener("click",()=>{
+      if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
+        settleTo(wrap,0); return;
+      }
+      openDetail(wrap.dataset.id, true);
+    });
     const det = wrap.querySelector(".detail");
     det.querySelector("[data-close]")?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
     det.querySelector('[data-act="detail-cancel"]')?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
