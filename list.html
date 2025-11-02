@@ -62,28 +62,25 @@ function fmt(iso){if(!iso)return"";const d=new Date(iso);return d.toLocaleString
 
 /* ===== DOM描画 ===== */
 function cardHTML(t){
-  const leftSide = t.status==="completed"
-    ? `<button class='btn ok' data-act='uncomplete'>取消</button>`
-    : `<button class='btn ok' data-act='complete'>完了</button>`;
-
-  return `
-  <div class="swipe-wrap card${t.status==="completed"?" ghost":""}" 
-       data-id="${t.id}" data-status="${t.status||'active'}">
-    <div class="actions">
-      <div>${leftSide}</div>
-      <div>
-        <button class='btn' data-act='pin'>ピン</button>
-        <button class='btn' data-act='detail'>詳細</button>
-        <button class='btn danger' data-act='delete'>削除</button>
-      </div>
+ const leftSide = t.status==="completed"
+   ? `<button class='btn ok' data-act='uncomplete'>取消</button>`
+   : `<button class='btn ok' data-act='complete'>完了</button>`;
+ return `
+ <div class="swipe-wrap card${t.status==="completed"?" ghost":""}" data-id="${t.id}" data-status="${t.status||'active'}">
+  <div class="actions">
+   <div>${leftSide}</div>
+   <div>
+     <button class='btn' data-act='pin'>ピン</button>
+     <button class='btn danger' data-act='delete'>削除</button>
+   </div>
+  </div>
+  <div class="track">
+    <div class="row">
+      <div class="titleTxt">${t.pinned?"📌":""}${esc(t.title||"(無題)")}</div>
+      <div class="meta">${fmt(t.due_at)}</div>
     </div>
-    <div class="track">
-      <div class="row">
-        <div class="titleTxt">${t.pinned?"📌":""}${esc(t.title||"(無題)")}</div>
-        <div class="meta">${fmt(t.due_at)}</div>
-      </div>
-    </div>
-  </div>`;
+  </div>
+ </div>`;
 }
 
 function render(){
@@ -126,153 +123,102 @@ async function runAction(id,act){
  右：強スワイプのみ完了/取消
  左：軽い → メニュー表示、強い → 削除（確認あり）
 */
-function bindSwipe(track) {
-  const wrap = track.parentElement;
-  const actions = wrap.querySelector(".actions");
+function bindSwipe(track){
+ const wrap=track.parentElement,actions=wrap.querySelector(".actions");
 
-  // 閾値設定
-  const SW_MENU = 40; // 軽い左スワイプでメニュー
-  const SW_ACTION = 150; // 強スワイプ距離
-  const V_MENU = 0.40; // 軽左スワイプ速度(px/ms)
-  const V_ACTION = 0.85; // 強スワイプ速度(px/ms)
+ // しきい値（必要なら微調整）
+ const SW_DEAD=28;     // これ以下は何もしない
+ const SW_MENU=40;     // 左にこれ以上でメニュー
+ const SW_ACTION=150;  // 強スワイプ閾値（左右共通）
 
-  let sx = 0, dx = 0, dragging = false;
-  const recent = []; // {x,t}
-  const WINDOW_MS = 120;
+ let sx=0,dx=0,drag=false;
 
-  const isOpen = () => wrap.classList.contains("menu");
-  const open = () => {
-    closeAll();
-    wrap.classList.add("menu");
-    actions.style.opacity = 1;
-    track.style.transform = "translateX(-96px)";
-  };
-  const close = () => {
-    wrap.classList.remove("menu");
-    actions.style.opacity = 0;
-    track.style.transform = "translateX(0)";
-  };
-  function closeAll() {
-    document.querySelectorAll(".swipe-wrap.menu").forEach(w => {
-      w.classList.remove("menu");
-      const tr = w.querySelector(".track");
-      const ac = w.querySelector(".actions");
-      tr.style.transform = "translateX(0)";
-      ac.style.opacity = 0;
-    });
-  }
+ const isOpen = ()=> wrap.classList.contains("menu");
+ const open   = ()=> { closeAll(); wrap.classList.add("menu"); actions.style.opacity=1; track.style.transform="translateX(-96px)"; };
+ const close  = ()=> { wrap.classList.remove("menu"); actions.style.opacity=0; track.style.transform="translateX(0)"; };
+ function closeAll(){
+   document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{
+     w.classList.remove("menu");
+     const tr=w.querySelector(".track"); const ac=w.querySelector(".actions");
+     tr.style.transform="translateX(0)"; ac.style.opacity=0;
+   });
+ }
 
-  // recent配列に動きを保存
-  function pushRecent(x) {
-    const now = performance.now();
-    recent.push({ x, t: now });
-    while (recent.length && (now - recent[0].t) > WINDOW_MS) recent.shift();
-  }
+ // ボタンはクリック優先
+ wrap.querySelectorAll(".btn").forEach(b=>{
+   b.addEventListener("click",e=>{
+     e.stopPropagation();
+     runAction(wrap.dataset.id, b.dataset.act);
+   });
+ });
 
-  // 速度(px/ms)
-  function velocity() {
-    if (recent.length < 2) return 0;
-    const a = recent[0], b = recent[recent.length - 1];
-    const dt = b.t - a.t;
-    return dt ? (b.x - a.x) / dt : 0;
-  }
+ const onStart = x => { drag=true; sx=x; dx=0; track.style.transition="none"; };
+ const onMove  = x => {
+   if(!drag) return;
+   dx = x - sx;
 
-  // スワイプ開始
-  const start = x => {
-    dragging = true;
-    sx = x;
-    dx = 0;
-    recent.length = 0;
-    pushRecent(x);
-    track.style.transition = "none";
-  };
+   // メニューが開いてる時は「右に少し」なら閉じるジェスチャのみにする
+   if(isOpen()){
+     if(dx>16){ close(); }
+     return; // メニュー表示中はカードを自由に動かさない
+   }
 
-  // スワイプ中
-  const move = x => {
-    if (!dragging) return;
-    dx = x - sx;
-    pushRecent(x);
+   // 右小スワイプは何も起きないが、視覚的に少し動かすと誤操作誘発するので最小限
+   // 左小スワイプはメニューのプレビューとして軽く動かす
+   const preview = Math.max(-96, Math.min(24, dx)); // 右に大きくは動かさない
+   track.style.transform = `translateX(${preview}px)`;
+   actions.style.opacity = Math.min(1, Math.abs(preview)/80);
+ };
+ const onEnd   = async () => {
+   track.style.transition="transform .18s ease";
 
-    if (isOpen()) {
-      if (dx > 20) close();
-      return;
-    }
+   // メニュー開いてるなら、指を離したらそのまま維持（右に強く戻した時だけ閉じるのは onMove で対応）
+   if(isOpen()){ track.style.transform="translateX(-96px)"; actions.style.opacity=1; drag=false; return; }
 
-    const preview = Math.max(-96, Math.min(24, dx));
-    track.style.transform = `translateX(${preview}px)`;
-    actions.style.opacity = Math.min(1, Math.abs(preview) / 80);
-  };
+   const dist = dx;
+   let act=null;
 
-  // スワイプ終了
-  const end = async () => {
-    track.style.transition = "transform .18s ease";
-    const v = velocity();
-    const dist = dx;
-    let act = null;
+   if (dist >= SW_ACTION) {
+     // 強い右：完了/取消
+     act = (wrap.dataset.status==="completed") ? "uncomplete" : "complete";
+   } else if (dist <= -SW_ACTION) {
+     // 強い左：削除（後で confirm。ここでは act 指定だけ）
+     act = "delete";
+   } else if (dist <= -SW_MENU) {
+     // 軽い左：メニュー
+     open();
+   } else if (Math.abs(dist) <= SW_DEAD) {
+     // 何もしない
+   }
 
-    if (isOpen()) {
-      track.style.transform = "translateX(-96px)";
-      actions.style.opacity = 1;
-      dragging = false;
-      dx = 0;
-      recent.length = 0;
-      return;
-    }
+   // 位置を戻す
+   if(!isOpen()){ track.style.transform="translateX(0)"; actions.style.opacity=0; }
 
-    // 強スワイプ判定（距離 or 速度）
-    if (v >= V_ACTION || dist >= SW_ACTION) {
-      act = wrap.dataset.status === "completed" ? "uncomplete" : "complete";
-    } else if (v <= -V_ACTION || dist <= -SW_ACTION) {
-      act = "delete";
-    } else if (v <= -V_MENU || dist <= -SW_MENU) {
-      open();
-    }
+   // 実行
+   if(act){
+     if(act==="delete"){
+       // 強い左は必ず確認
+       const yes = confirm("このタスクを削除しますか？");
+       if(!yes){ drag=false; dx=0; return; }
+     }
+     await runAction(wrap.dataset.id, act);
+   }
 
-    if (!act) {
-      track.style.transform = "translateX(0)";
-      actions.style.opacity = 0;
-      dragging = false;
-      dx = 0;
-      return;
-    }
+   drag=false; dx=0;
+ };
 
-    // 確認つき削除
-    if (act === "delete") {
-      const ok = confirm("このタスクを削除しますか？");
-      if (!ok) {
-        track.style.transform = "translateX(0)";
-        actions.style.opacity = 0;
-        dragging = false;
-        dx = 0;
-        return;
-      }
-    }
+ // マウス/タッチ両対応
+ track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
+ track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
+ track.addEventListener("touchend",  onEnd);
+ track.addEventListener("touchcancel", onEnd);
 
-    await runAction(wrap.dataset.id, act);
-    dragging = false;
-    dx = 0;
-    recent.length = 0;
-  };
+ track.addEventListener("mousedown",e=>onStart(e.clientX));
+ track.addEventListener("mousemove",e=>{ if(e.buttons===1) onMove(e.clientX); });
+ track.addEventListener("mouseup",onEnd);
 
-  // ボタンイベント
-  wrap.querySelectorAll(".btn").forEach(b =>
-    b.addEventListener("click", e => {
-      e.stopPropagation();
-      runAction(wrap.dataset.id, b.dataset.act);
-    })
-  );
-
-  // イベント登録
-  track.addEventListener("touchstart", e => start(e.touches[0].clientX), { passive: true });
-  track.addEventListener("touchmove", e => move(e.touches[0].clientX), { passive: true });
-  track.addEventListener("touchend", end);
-  track.addEventListener("touchcancel", end);
-
-  track.addEventListener("mousedown", e => start(e.clientX));
-  track.addEventListener("mousemove", e => { if (e.buttons === 1) move(e.clientX); });
-  track.addEventListener("mouseup", end);
-
-  document.addEventListener("click", e => { if (!wrap.contains(e.target)) closeAll(); });
+ // カード外タップで他のメニューは閉じる
+ document.addEventListener("click",e=>{ if(!wrap.contains(e.target)) closeAll(); });
 }
 
 /* ===== 起動 ===== */
@@ -286,5 +232,3 @@ function bindSwipe(track) {
 </script>
 </body>
 </html>
-
-
