@@ -62,25 +62,28 @@ function fmt(iso){if(!iso)return"";const d=new Date(iso);return d.toLocaleString
 
 /* ===== DOM描画 ===== */
 function cardHTML(t){
- const leftSide = t.status==="completed"
-   ? `<button class='btn ok' data-act='uncomplete'>取消</button>`
-   : `<button class='btn ok' data-act='complete'>完了</button>`;
- return `
- <div class="swipe-wrap card${t.status==="completed"?" ghost":""}" data-id="${t.id}" data-status="${t.status||'active'}">
-  <div class="actions">
-   <div>${leftSide}</div>
-   <div>
-     <button class='btn' data-act='pin'>ピン</button>
-     <button class='btn danger' data-act='delete'>削除</button>
-   </div>
-  </div>
-  <div class="track">
-    <div class="row">
-      <div class="titleTxt">${t.pinned?"📌":""}${esc(t.title||"(無題)")}</div>
-      <div class="meta">${fmt(t.due_at)}</div>
+  const leftSide = t.status==="completed"
+    ? `<button class='btn ok' data-act='uncomplete'>取消</button>`
+    : `<button class='btn ok' data-act='complete'>完了</button>`;
+
+  return `
+  <div class="swipe-wrap card${t.status==="completed"?" ghost":""}" 
+       data-id="${t.id}" data-status="${t.status||'active'}">
+    <div class="actions">
+      <div>${leftSide}</div>
+      <div>
+        <button class='btn' data-act='pin'>ピン</button>
+        <button class='btn' data-act='detail'>詳細</button>
+        <button class='btn danger' data-act='delete'>削除</button>
+      </div>
     </div>
-  </div>
- </div>`;
+    <div class="track">
+      <div class="row">
+        <div class="titleTxt">${t.pinned?"📌":""}${esc(t.title||"(無題)")}</div>
+        <div class="meta">${fmt(t.due_at)}</div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function render(){
@@ -123,146 +126,154 @@ async function runAction(id,act){
  右：強スワイプのみ完了/取消
  左：軽い → メニュー表示、強い → 削除（確認あり）
 */
-function bindSwipe(track){
-  const wrap = track.parentElement, actions = wrap.querySelector(".actions");
+function bindSwipe(track) {
+  const wrap = track.parentElement;
+  const actions = wrap.querySelector(".actions");
 
-  // 距離しきい値（既存と同等）
-  const SW_DEAD   = 28;    // 何もしないゾーン
-  const SW_MENU   = 60;    // メニューを開く左スワイプ距離
-  const SW_ACTION = 150;   // 強スワイプ距離
+  // 閾値設定
+  const SW_MENU = 40; // 軽い左スワイプでメニュー
+  const SW_ACTION = 150; // 強スワイプ距離
+  const V_MENU = 0.40; // 軽左スワイプ速度(px/ms)
+  const V_ACTION = 0.85; // 強スワイプ速度(px/ms)
 
-  // 速度しきい値（px/ms = 1000px/s換算）
-  const V_MENU    = 0.40;  // 左へ約0.40px/ms 以上（= 400px/s）で軽左 → メニュー
-  const V_ACTION  = 0.85;  // 左右どちらも約0.85px/ms 以上（= 850px/s）で強スワイプ
+  let sx = 0, dx = 0, dragging = false;
+  const recent = []; // {x,t}
+  const WINDOW_MS = 120;
 
-  let sx=0, dx=0, drag=false;
-
-  // 直近の動きを記録（150msの窓で速度推定）
-  const recent = []; // {x, t}
-  const WINDOW_MS = 150;
-
-  const isOpen = ()=> wrap.classList.contains("menu");
-  const open   = ()=> { closeAll(); wrap.classList.add("menu"); actions.style.opacity=1; track.style.transform="translateX(-96px)"; };
-  const close  = ()=> { wrap.classList.remove("menu"); actions.style.opacity=0; track.style.transform="translateX(0)"; };
-
-  function closeAll(){
-    document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{
+  const isOpen = () => wrap.classList.contains("menu");
+  const open = () => {
+    closeAll();
+    wrap.classList.add("menu");
+    actions.style.opacity = 1;
+    track.style.transform = "translateX(-96px)";
+  };
+  const close = () => {
+    wrap.classList.remove("menu");
+    actions.style.opacity = 0;
+    track.style.transform = "translateX(0)";
+  };
+  function closeAll() {
+    document.querySelectorAll(".swipe-wrap.menu").forEach(w => {
       w.classList.remove("menu");
-      const tr=w.querySelector(".track"); const ac=w.querySelector(".actions");
-      tr.style.transform="translateX(0)"; ac.style.opacity=0;
+      const tr = w.querySelector(".track");
+      const ac = w.querySelector(".actions");
+      tr.style.transform = "translateX(0)";
+      ac.style.opacity = 0;
     });
   }
 
-  // ボタンはクリック優先
-  wrap.querySelectorAll(".btn").forEach(b=>{
-    b.addEventListener("click",e=>{
-      e.stopPropagation();
-      runAction(wrap.dataset.id, b.dataset.act);
-    });
-  });
-
-  function pushRecent(x){
+  // recent配列に動きを保存
+  function pushRecent(x) {
     const now = performance.now();
-    recent.push({x, t: now});
-    // 150ms より古いサンプルを捨てる
+    recent.push({ x, t: now });
     while (recent.length && (now - recent[0].t) > WINDOW_MS) recent.shift();
   }
-  function currentVelocity(){
+
+  // 速度(px/ms)
+  function velocity() {
     if (recent.length < 2) return 0;
-    const a = recent[0], b = recent[recent.length-1];
-    const dt = b.t - a.t; if (dt <= 0) return 0;
-    return (b.x - a.x) / dt; // px/ms（+が右、-が左）
+    const a = recent[0], b = recent[recent.length - 1];
+    const dt = b.t - a.t;
+    return dt ? (b.x - a.x) / dt : 0;
   }
 
-  const onStart = x => {
-    drag = true;
-    sx = x; dx = 0;
+  // スワイプ開始
+  const start = x => {
+    dragging = true;
+    sx = x;
+    dx = 0;
     recent.length = 0;
     pushRecent(x);
     track.style.transition = "none";
   };
 
-  const onMove = x => {
-    if(!drag) return;
+  // スワイプ中
+  const move = x => {
+    if (!dragging) return;
     dx = x - sx;
     pushRecent(x);
 
-    if(isOpen()){
-      // メニュー開いてる時に右へ少し動いたら閉じる
-      if (dx > 16) close();
+    if (isOpen()) {
+      if (dx > 20) close();
       return;
     }
 
-    // 視覚的プレビュー（右へは少しだけ、左は最大-96px）
     const preview = Math.max(-96, Math.min(24, dx));
     track.style.transform = `translateX(${preview}px)`;
-    actions.style.opacity = Math.min(1, Math.abs(preview)/80);
+    actions.style.opacity = Math.min(1, Math.abs(preview) / 80);
   };
 
-  const onEnd = async () => {
+  // スワイプ終了
+  const end = async () => {
     track.style.transition = "transform .18s ease";
-
-    // 速度計算（直近150msの平均速度）
-    const v = currentVelocity(); // px/ms（+右 / -左）
+    const v = velocity();
     const dist = dx;
+    let act = null;
 
-    // メニュー開いてたら維持（右に戻すは onMove で閉じる）
-    if(isOpen()){
+    if (isOpen()) {
       track.style.transform = "translateX(-96px)";
       actions.style.opacity = 1;
-      drag=false; dx=0; recent.length=0;
+      dragging = false;
+      dx = 0;
+      recent.length = 0;
       return;
     }
 
-    let act = null;
-
-    // ===== 強スワイプ（速度 or 距離） =====
-    if (v >=  V_ACTION || dist >=  SW_ACTION) {
-      // 強い右 → 完了 / 取り消し
-      act = (wrap.dataset.status === "completed") ? "uncomplete" : "complete";
+    // 強スワイプ判定（距離 or 速度）
+    if (v >= V_ACTION || dist >= SW_ACTION) {
+      act = wrap.dataset.status === "completed" ? "uncomplete" : "complete";
     } else if (v <= -V_ACTION || dist <= -SW_ACTION) {
-      // 強い左 → 削除（後でconfirm）
       act = "delete";
-    } else {
-      // ===== 軽左（速度 or 距離）でメニュー =====
-      if (v <= -V_MENU || dist <= -SW_MENU) {
-        open();
-      } else if (Math.abs(dist) <= SW_DEAD) {
-        // 何もしない
-      }
+    } else if (v <= -V_MENU || dist <= -SW_MENU) {
+      open();
     }
 
-    // 位置を戻す（メニューを開いた場合は open() 内で調整済み）
-    if(!isOpen()){
+    if (!act) {
       track.style.transform = "translateX(0)";
       actions.style.opacity = 0;
+      dragging = false;
+      dx = 0;
+      return;
     }
 
-    if (act) {
-      if (act === "delete") {
-        const yes = confirm("このタスクを削除しますか？");
-        if (!yes) { drag=false; dx=0; recent.length=0; return; }
+    // 確認つき削除
+    if (act === "delete") {
+      const ok = confirm("このタスクを削除しますか？");
+      if (!ok) {
+        track.style.transform = "translateX(0)";
+        actions.style.opacity = 0;
+        dragging = false;
+        dx = 0;
+        return;
       }
-      await runAction(wrap.dataset.id, act);
     }
 
-    drag=false; dx=0; recent.length=0;
+    await runAction(wrap.dataset.id, act);
+    dragging = false;
+    dx = 0;
+    recent.length = 0;
   };
 
-  // マウス/タッチ両対応
-  track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
-  track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
-  track.addEventListener("touchend",  onEnd);
-  track.addEventListener("touchcancel", onEnd);
+  // ボタンイベント
+  wrap.querySelectorAll(".btn").forEach(b =>
+    b.addEventListener("click", e => {
+      e.stopPropagation();
+      runAction(wrap.dataset.id, b.dataset.act);
+    })
+  );
 
-  track.addEventListener("mousedown",e=>onStart(e.clientX));
-  track.addEventListener("mousemove",e=>{ if(e.buttons===1) onMove(e.clientX); });
-  track.addEventListener("mouseup",onEnd);
+  // イベント登録
+  track.addEventListener("touchstart", e => start(e.touches[0].clientX), { passive: true });
+  track.addEventListener("touchmove", e => move(e.touches[0].clientX), { passive: true });
+  track.addEventListener("touchend", end);
+  track.addEventListener("touchcancel", end);
 
-  // カード外クリックで他のメニューは閉じる
-  document.addEventListener("click",e=>{ if(!wrap.contains(e.target)) closeAll(); });
+  track.addEventListener("mousedown", e => start(e.clientX));
+  track.addEventListener("mousemove", e => { if (e.buttons === 1) move(e.clientX); });
+  track.addEventListener("mouseup", end);
+
+  document.addEventListener("click", e => { if (!wrap.contains(e.target)) closeAll(); });
 }
-
 
 /* ===== 起動 ===== */
 (async()=>{
@@ -275,4 +286,5 @@ function bindSwipe(track){
 </script>
 </body>
 </html>
+
 
