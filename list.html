@@ -1,343 +1,557 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LIST｜タスク</title>
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<style>
-  :root{--bg:#f7f7f8;--card:#fff;--ink:#111;--sub:#666;--line:#e9e9ec;--accent:#3957ff;--ok:#16a34a;--warn:#eab308;--danger:#ef4444}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:10}
-  .bar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px}
-  .pill{font-size:12px;background:#eef2ff;border-radius:999px;padding:6px 10px}
-  main{max-width:720px;margin:0 auto;padding:14px}
-  h3{margin:10px 6px;font-size:13px;color:var(--sub)}
-  .card{position:relative;margin:10px 0;border:1px solid var(--line);border-radius:16px;background:#fff;overflow:hidden}
-  .actions{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 8px;pointer-events:none;opacity:0} /* 初期は透けない */
-  .aL,.aR{display:flex;gap:6px}
-  .btn{pointer-events:auto;border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 10px;font-size:12px;white-space:nowrap}
-  .ok{color:var(--ok);background:#ecfdf5;border-color:#c7ecd1}
-  .warn{color:var(--warn);background:#fffbeb;border-color:#fde68a}
-  .danger{color:var(--danger);background:#fef2f2;border-color:#fecaca}
-  .track{position:relative;touch-action:pan-y;background:#fff;border-radius:16px;z-index:2}
-  .row{display:flex;align-items:center;gap:8px;padding:12px 14px}
-  .title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .meta{display:flex;gap:8px;color:var(--sub);font-size:12px}
-  .chip{padding:2px 8px;border:1px solid var(--line);border-radius:999px}
-  .ghost{opacity:.45}
-  .detail{display:none;border-top:1px dashed var(--line);padding:10px 12px 12px;background:#fff}
-  .detail.open{display:block}
-  .dHdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-  .close{border:none;background:transparent;font-size:18px;line-height:1;cursor:pointer;padding:4px}
-  .grid{display:grid;grid-template-columns:88px 1fr;gap:8px;align-items:center}
-  input[type="text"],textarea,select,input[type="datetime-local"]{width:100%;padding:8px;border:1px solid var(--line);border-radius:10px;background:#fff;font:inherit}
-  textarea{min-height:70px;resize:vertical}
-  .save{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff}
-  .empty{color:var(--sub);text-align:center;padding:36px 12px}
-  .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.25s}
-  .toast.show{opacity:1}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LIST｜タスク一覧</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root{
+      --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
+      --pill:#eef2ff; --accent:#3957ff; --ok:#16a34a; --warn:#eab308; --danger:#ef4444;
+      --actL:#ecfdf5; --actR:#fef2f2;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    header{position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); z-index:10}
+    .bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 16px}
+    .title{font-weight:650; letter-spacing:.2px}
+    .pill{padding:6px 10px; border-radius:999px; background:var(--pill); font-size:12px}
+
+    main{padding:14px; max-width:720px; margin:0 auto}
+    .section{margin:18px 0}
+    .section h3{margin:8px 6px 10px; font-size:13px; color:var(--sub); font-weight:600}
+
+    /* カード&スワイプ */
+    .card-wrap{
+      position:relative; margin:10px 0; border-radius:16px; overflow:visible;
+    }
+    /* アクション面（初期は完全に見えない） */
+    .actions{
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
+      padding:0 8px; opacity:0; pointer-events:none; transition:opacity .15s ease;
+      z-index:0; /* track(=カード)の下層に配置して透け防止 */
+    }
+    .card-wrap.open-left .actions,
+    .card-wrap.open-right .actions{ opacity:1; pointer-events:auto; }
+    .left-actions{display:flex; gap:6px; padding-left:8px}
+    .right-actions{display:flex; gap:6px; padding-right:8px}
+    .btn{
+      pointer-events:auto; padding:8px 10px; border-radius:10px; border:1px solid var(--line);
+      background:#fff; font-size:12px; user-select:none;
+    }
+    .btn.ok{ border-color:#c7ecd1; color:var(--ok); background:var(--actL) }
+    .btn.warn{ border-color:#fde68a; color:var(--warn); background:#fffbeb }
+    .btn.danger{ border-color:#fecaca; color:var(--danger); background:var(--actR) }
+
+    /* 実カード（track） */
+    .track{
+      position:relative; z-index:1;
+      background:var(--card); border:1px solid var(--line); border-radius:16px;
+      box-shadow:0 1px 0 rgba(0,0,0,.03);
+      padding:12px 14px; transform:translateX(0); transition:transform .18s ease;
+      touch-action:pan-y;
+    }
+    .ghost{opacity:.45}
+    .row{display:flex; align-items:center; gap:8px}
+    .titleTxt{flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .meta{display:flex; gap:8px; color:var(--sub); font-size:12px}
+    .pillDue{padding:2px 8px; border-radius:999px; border:1px solid var(--line)}
+    .pin{font-size:12px; color:var(--accent)}
+
+    .empty{color:var(--sub); text-align:center; padding:36px 12px}
+
+    .toolbar{display:flex; gap:8px; padding:8px}
+    .toolbar input{flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff}
+    .toolbar button{padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#fff}
+
+    /* 詳細パネル */
+    .detail{
+      border-top:1px dashed var(--line); margin-top:10px; padding-top:10px; display:none;
+    }
+    .detail.open{display:block}
+    .detail-grid{
+      display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:6px;
+    }
+    .detail label{font-size:12px; color:var(--sub)}
+    .detail textarea,.detail input,.detail select{
+      width:100%; padding:8px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:14px;
+    }
+    .detail .row-btns{display:flex; gap:8px; justify-content:flex-end; margin-top:8px}
+    .detail .close-x{
+      position:absolute; top:10px; right:12px; width:26px; height:26px; border-radius:50%;
+      border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center;
+      font-weight:700; cursor:pointer;
+    }
+
+    .toast{position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111; color:#fff;
+      padding:10px 14px; border-radius:999px; font-size:13px; opacity:0; transition:.25s}
+    .toast.show{opacity:1}
+  </style>
 </head>
 <body>
-<header>
-  <div class="bar">
-    <div>LIST｜タスク</div>
-    <div class="pill" id="user-pill">loading…</div>
-  </div>
-</header>
-
-<main>
-  <h3>📝 未完了</h3>
-  <div id="active-list"></div>
-
-  <section id="sec-completed" hidden>
-    <h3>✅ 完了（直近1週間）</h3>
-    <div id="completed-list"></div>
-  </section>
-
-  <div id="empty" class="empty" hidden>まだタスクがありません。</div>
-</main>
-
-<div id="toast" class="toast"></div>
-
-<script>
-/* ===== 設定（差し替え） ===== */
-const LIFF_ID        = "2008311584-NdJqOqMn";
-const LIST_API_URL   = "https://lumicreate.xvps.jp/webhook/webhook-list";
-const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action";
-/* ============================ */
-
-let gUserId=null, gAll=[];
-
-const $ = s=>document.querySelector(s);
-const $active = $('#active-list');
-const $completed = $('#completed-list');
-const $secCompleted = $('#sec-completed');
-const $empty = $('#empty');
-
-function toast(t){ const el=$('.toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1300); }
-function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
-function fmtJST(iso){ if(!iso) return ''; return new Date(iso).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
-function endOfTodayJST(){ const n=new Date(); const j=new Date(n.toLocaleString('en-US',{timeZone:'Asia/Tokyo'})); j.setHours(24,0,0,0); return new Date(j.getTime()-9*3600*1000).toISOString(); }
-function defRem(iso){ const d=new Date(iso); return new Date(d.getTime()-2*3600*1000).toISOString(); }
-function localValue(iso){ if(!iso) return ''; const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
-function toISO(val){ if(!val) return ''; const d=new Date(val); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString(); }
-
-function split(all){
-  const weekAgo=Date.now()-7*24*3600*1000, act=[], comp=[];
-  all.forEach(t=>{
-    if(t.status==='completed'){
-      const c= t.completed_at ? new Date(t.completed_at).getTime() : 0;
-      if(c>=weekAgo) comp.push(t);
-    }else if(t.status!=='deleted' && t.status!=='archived'){
-      act.push(t);
-    }
-  });
-  return {act, comp};
-}
-function sortByRule(arr){
-  return arr.slice().sort((a,b)=>{
-    const ad=new Date(a.due_at||0)-0, bd=new Date(b.due_at||0)-0;
-    if(ad!==bd) return ad-bd;
-    const ap=Number.isFinite(a.priority)?a.priority:-1;
-    const bp=Number.isFinite(b.priority)?b.priority:-1;
-    return bp-ap;
-  });
-}
-
-function detailHTML(t){
-  const due = t.due_at || endOfTodayJST();
-  const rem = (t.remind_times && t.remind_times[0]) || defRem(due);
-  const pri = Number.isFinite(t.priority) ? t.priority : 1;
-  return `
-    <div class="detail" data-id="${t.id}">
-      <div class="dHdr"><div>詳細</div><button class="close" aria-label="閉じる">✕</button></div>
-      <div class="grid">
-        <label>コメント</label>
-        <textarea name="detail">${esc(t.detail||'')}</textarea>
-
-        <label>優先度</label>
-        <select name="priority">
-          <option value="1" ${pri===1?'selected':''}>1</option>
-          <option value="2" ${pri===2?'selected':''}>2</option>
-          <option value="3" ${pri===3?'selected':''}>3</option>
-        </select>
-
-        <label>期限</label>
-        <input type="datetime-local" name="due_at" value="${localValue(due)}"/>
-
-        <label>リマインド</label>
-        <input type="datetime-local" name="remind" value="${localValue(rem)}"/>
-      </div>
-      <button class="save">保存</button>
-    </div>`;
-}
-
-function cardHTML(t){
-  const leftPrimary = (t.status==='completed')?'uncomplete':'complete';
-  const leftLabel   = (t.status==='completed')?'未完了':'完了';
-  return `
-  <div class="card" data-id="${t.id}" data-status="${t.status}">
-    <div class="actions">
-      <div class="aL">
-        <button class="btn ok"   data-act="${leftPrimary}">${leftLabel}</button>
-        <button class="btn warn" data-act="pin">${t.pinned?'ピン解除':'ピン'}</button>
-      </div>
-      <div class="aR">
-        <button class="btn"      data-act="detail">詳細</button>
-        <button class="btn danger" data-act="delete">削除</button>
-      </div>
+  <header>
+    <div class="bar">
+      <div class="title">LIST｜タスク</div>
+      <div class="pill" id="user-pill">loading…</div>
     </div>
-    <div class="track ${t.status==='completed'?'ghost':''}">
-      <div class="row">
-        <div class="title">${t.pinned?'📌 ':''}${esc(t.title||'(無題)')}</div>
-        <div class="meta"><span class="chip">⏰ ${esc(fmtJST(t.due_at))}</span>${Number.isFinite(t.priority)?`<span class="chip">★${t.priority}</span>`:''}</div>
-      </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input id="q" placeholder="検索（タイトル/詳細）" />
+      <button id="reload">再読込</button>
     </div>
-    ${detailHTML(t)}
-  </div>`;
-}
 
-function render(){
-  const {act, comp} = split(gAll);
-  const a = sortByRule(act), c = sortByRule(comp);
-  $active.innerHTML = a.map(cardHTML).join('');
-  $completed.innerHTML = c.map(cardHTML).join('');
-  $secCompleted.hidden = c.length===0;
-  $empty.hidden = (a.length+c.length)>0;
+    <div id="pinned" class="section" hidden>
+      <h3>📌 ピン留め</h3>
+      <div id="pinned-list"></div>
+    </div>
 
-  document.querySelectorAll('.card').forEach(bindCard);
-}
+    <div id="active" class="section">
+      <h3>📝 未完了</h3>
+      <div id="active-list"></div>
+    </div>
 
-function bindCard(card){
-  const id=card.dataset.id;
-  const track=card.querySelector('.track'), actions=card.querySelector('.actions');
-  const d=card.querySelector('.detail'), close=d.querySelector('.close'), save=d.querySelector('.save');
+    <div id="completed" class="section" hidden>
+      <h3>✅ 完了（直近1週間）</h3>
+      <div id="completed-list"></div>
+    </div>
 
-  // 行タップで詳細トグル（1件だけ開く）
-  track.addEventListener('click', ()=>{
-    // スナップ中はクリックで詳細を開かない（ボタン優先）
-    if (card.dataset.snap) return;
-    document.querySelectorAll('.detail.open').forEach(x=>{ if(x!==d) x.classList.remove('open'); });
-    d.classList.toggle('open');
-  });
-  close.addEventListener('click', (e)=>{ e.stopPropagation(); d.classList.remove('open'); });
+    <div id="empty" class="empty" hidden>まだタスクがありません。LINEでメッセージを送ると追加されます。</div>
+  </main>
 
-  save.addEventListener('click', async (e)=>{
-    e.stopPropagation();
-    const dueISO = toISO(d.querySelector('[name="due_at"]').value) || endOfTodayJST();
-    const fields = {
-      detail: d.querySelector('[name="detail"]').value,
-      priority: Number(d.querySelector('[name="priority"]').value),
-      due_at: dueISO,
-      remind_times: [ toISO(d.querySelector('[name="remind"]').value) || defRem(dueISO) ]
-    };
-    const ok = await postAction('update', id, fields);
-    if(ok){ toast('保存しました'); await load(); } else { toast('保存に失敗'); }
-  });
+  <div id="toast" class="toast"></div>
 
-  // ボタンクリックは「スナップ中だけ」有効
-  actions.addEventListener('click', async (e)=>{
-    const btn = e.target.closest('.btn'); if(!btn) return;
-    const snap = card.dataset.snap; if(!snap) return; // スナップしていない時は無視
-    const act = btn.dataset.act;
-    if(act==='detail'){ // 詳細開閉は即
-      document.querySelectorAll('.detail.open').forEach(x=>{ if(x!==d) x.classList.remove('open'); });
-      d.classList.toggle('open'); reset(track, actions, card); return;
-    }
-    if(act==='delete'){ if(!confirm('このタスクを削除しますか？')) return; }
-    const ok = await postAction(act, id);
-    if(ok){ await load(); } else { toast('失敗しました'); }
-  });
+  <script>
+  /** ===== 設定 ===== */
+  const LIFF_ID = "2008311584-NdJqOqMn";
+  const LIST_API_URL   = "https://lumicreate.xvps.jp/webhook/webhook-list";
+  const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action";
 
-  bindSwipe(track, actions, card);
-}
+  /** ===== 状態 ===== */
+  let gUserId = null;
+  let gAllTasks = [];
+  let gOpenDetailId = null; // 詳細は同時に1つだけ
+  let gOpenSideId = null;   // スナップ（左/右）も同時に1つだけ
 
-function reset(track, actions, card){
-  track.style.transition='transform .16s ease';
-  track.style.transform='translateX(0)';
-  actions.style.opacity = 0;
-  delete card.dataset.snap;
-}
+  /** ===== util ===== */
+  const el = s => document.querySelector(s);
+  const $pinned = el("#pinned"), $pinnedList = el("#pinned-list");
+  const $activeList = el("#active-list");
+  const $completed = el("#completed"), $completedList = el("#completed-list");
+  const $empty = el("#empty");
 
-function bindSwipe(track, actions, card){
-  // スナップ/強スワイプの閾値
-  const SW_SNAP   = 150;   // スナップ位置（ボタンがしっかり見える）
-  const SW_STRONG = 200;   // 強スワイプ距離
-  const VX_STRONG = 1.0;   // 強スワイプ速度(px/ms)
-  const HOLD_MS   = 2500;  // スナップ維持時間
+  function toast(msg){
+    const t = el("#toast"); t.textContent = msg; t.classList.add("show");
+    setTimeout(()=>t.classList.remove("show"), 1400);
+  }
+  function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]))}
+  function fmtJST(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
+  }
+  const isFiniteNum = v => Number.isFinite(v);
 
-  let sx=0, dx=0, active=false, lastX=0, lastT=0, vx=0, timer=null;
-
-  const setX = x => {
-    track.style.transform=`translateX(${x}px)`;
-    actions.style.opacity=Math.min(1,Math.abs(x)/80);
-  };
-
-  const onStart = x => {
-    active=true; sx=x; dx=0; lastX=x; lastT=Date.now(); vx=0;
-    track.style.transition='none';
-    if(timer){clearTimeout(timer); timer=null;}
-  };
-  const onMove = x => {
-    if(!active) return;
-    const now=Date.now(), dt=Math.max(1, now-lastT);
-    dx = x - sx;
-    vx = (x - lastX) / dt; // px/ms
-    lastX = x; lastT = now;
-    setX(dx);
-  };
-  const onEnd = async () => {
-    if(!active) return; active=false;
-    const absDx=Math.abs(dx), dir = dx<0 ? 'right' : (dx>0 ? 'left' : 'none');
-    const absVx=Math.abs(vx);
-
-    // 強スワイプ（速度 or 距離）→ 即アクション
-    if((absVx>=VX_STRONG && absDx>=SW_SNAP) || absDx>=SW_STRONG){
-      track.style.transition='transform .12s ease';
-      setX(dir==='left' ? SW_STRONG : -SW_STRONG);
-      // 実行（左=完了/未完了、右=削除）
-      if(dir==='left'){
-        const act = (card.dataset.status==='completed')?'uncomplete':'complete';
-        const ok = await postAction(act, card.dataset.id);
-        reset(track, actions, card);
-        if(ok) await load(); else toast('失敗しました');
-      }else if(dir==='right'){
-        if(confirm('このタスクを削除しますか？')){
-          const ok = await postAction('delete', card.dataset.id);
-          reset(track, actions, card);
-          if(ok) await load(); else toast('失敗しました');
-        }else{
-          reset(track, actions, card);
-        }
-      }else{
-        reset(track, actions, card);
+  /** 並び順：ピン → 優先度(降) → 期限(昇) → その他 */
+  function sortCombined(arr){
+    return arr.slice().sort((a,b)=>{
+      // 1) pinned desc
+      if(a.pinned !== b.pinned) return (b.pinned?1:0)-(a.pinned?1:0);
+      // 2) priority desc (nullは最後)
+      const ap = isFiniteNum(a.priority) ? a.priority : -1;
+      const bp = isFiniteNum(b.priority) ? b.priority : -1;
+      if(ap !== bp) return bp - ap;
+      // 3) due_at asc (nullは最後)
+      const ad = a.due_at ? new Date(a.due_at).getTime() : Number.POSITIVE_INFINITY;
+      const bd = b.due_at ? new Date(b.due_at).getTime() : Number.POSITIVE_INFINITY;
+      if(ad !== bd) return ad - bd;
+      // 4) title asc
+      const at = (a.title||"").toLowerCase(), bt=(b.title||"").toLowerCase();
+      if(at < bt) return -1; if(at > bt) return 1; return 0;
+    });
+  }
+  function splitByStatus(all){
+    const now = Date.now(), weekAgo = now - 7*24*3600*1000;
+    const pinned=[], active=[], completed=[];
+    for(const t of all){
+      if(t.status==="deleted" || t.status==="archived") continue;
+      if(t.status==="completed"){
+        const cAt = t.completed_at ? new Date(t.completed_at).getTime() : 0;
+        if(cAt >= weekAgo) completed.push(t);
+        continue;
       }
-      return;
+      if(t.pinned){ pinned.push(t); continue; }
+      active.push(t);
     }
+    return { pinned, active, completed };
+  }
 
-    // 軽スワイプ → スナップ（ボタン操作待ち）
-    if(absDx>=SW_SNAP){
-      track.style.transition='transform .16s ease';
-      const snapX = dir==='left' ? SW_SNAP : -SW_SNAP;
-      setX(snapX);
-      card.dataset.snap = dir;              // ★スナップ状態フラグ
-      actions.style.opacity = 1;
+  /** ===== レンダリング ===== */
+  function cardHTML(t){
+    const dueTxt = fmtJST(t.due_at);
+    const pin = t.pinned ? '<span class="pin">📌</span>' : "";
+    const ghost = t.status==="completed" ? " ghost" : "";
 
-      timer = setTimeout(()=>{ reset(track, actions, card); }, HOLD_MS);
-      return;
+    return `
+    <div class="card-wrap" data-id="${t.id}">
+      <div class="actions">
+        <div class="left-actions">
+          <button class="btn ok" data-act="complete">完了</button>
+          <button class="btn" data-act="pin">${t.pinned?"ピン解除":"ピン"}</button>
+        </div>
+        <div class="right-actions">
+          <button class="btn warn" data-act="detail">詳細</button>
+          <button class="btn danger" data-act="delete">削除</button>
+        </div>
+      </div>
+      <div class="track${ghost}">
+        <div class="row">
+          <div class="titleTxt">${pin}${esc(t.title||"(無題)")}</div>
+          <div class="meta">
+            <span class="pillDue">⏰ ${esc(dueTxt)}</span>
+            ${isFiniteNum(t.priority)?`<span class="pillDue">★${t.priority}</span>`:""}
+          </div>
+        </div>
+        <div class="detail" id="detail-${t.id}">
+          <div class="close-x" data-close="1">×</div>
+          <label>コメント（メモ）</label>
+          <textarea data-field="detail" rows="3" placeholder="メモ">${esc(t.detail||"")}</textarea>
+          <div class="detail-grid">
+            <div>
+              <label>優先度（1〜3）</label>
+              <select data-field="priority">
+                <option value="">（空）</option>
+                <option value="1" ${t.priority==1?"selected":""}>1</option>
+                <option value="2" ${t.priority==2?"selected":""}>2</option>
+                <option value="3" ${t.priority==3?"selected":""}>3</option>
+              </select>
+            </div>
+            <div>
+              <label>期限</label>
+              <input data-field="due_at" type="datetime-local" value="${toLocalDatetimeValue(t.due_at)}" />
+            </div>
+          </div>
+          <div style="margin-top:6px">
+            <label>リマインド（1件）</label>
+            <input data-field="remind0" type="datetime-local" value="${toLocalDatetimeValue((t.remind_times||[])[0])}" />
+          </div>
+          <div class="row-btns">
+            <button class="btn" data-act="detail-cancel">閉じる</button>
+            <button class="btn ok" data-act="detail-save">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+  function toLocalDatetimeValue(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    const pad = n=>String(n).padStart(2,"0");
+    const yyyy = d.getFullYear(), mm=pad(d.getMonth()+1), dd=pad(d.getDate()),
+          hh = pad(d.getHours()), mi=pad(d.getMinutes());
+    // input[type=datetime-local] はローカル時刻で受ける
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+  function fromLocalDatetimeValue(val){
+    if(!val) return null;
+    // ローカルをそのまま解析→UTC ISOへ
+    const d = new Date(val);
+    return d.toISOString();
+  }
+
+  function render(){
+    const { pinned, active, completed } = splitByStatus(gAllTasks);
+    const pins = sortCombined(pinned).slice(0,3);
+    const acts = sortCombined(active);
+    const comps = sortCombined(completed);
+
+    $pinned.hidden = pins.length===0;
+    $completed.hidden = comps.length===0;
+    $empty.hidden = pins.length + acts.length > 0;
+
+    $pinnedList.innerHTML = pins.map(cardHTML).join("");
+    $activeList.innerHTML = acts.map(cardHTML).join("");
+    $completedList.innerHTML = comps.map(cardHTML).join("");
+
+    // スワイプとボタンをバインド
+    [...document.querySelectorAll(".card-wrap")].forEach(bindSwipeAndButtons);
+    // カードタップで詳細開閉（track領域）
+    [...document.querySelectorAll(".track")].forEach(bindTapToDetail);
+
+    // タイトルに件数表示
+    document.querySelector(".title").textContent = `LIST｜タスク（${pins.length+acts.length}）`;
+  }
+
+  /** ===== スワイプ実装 =====
+   * 軽いスワイプ→SNAP_Xまでスナップ固定、ボタン露出・タップ可
+   * 速い/大きいスワイプ → 即時実行（左=完了 / 右=削除）
+   */
+  const SNAP_X = 96;         // 露出位置（ボタンがしっかり見える）
+  const FULL_X = 164;        // これ以上は即時実行候補
+  const V_FULL = 0.6;        // px/ms 以上の速度で即時実行
+  const TAP_MAX_MOVE = 6;    // これ以下ならタップ
+
+  function bindSwipeAndButtons(wrap){
+    const track = wrap.querySelector(".track");
+    const leftBtns = wrap.querySelector(".left-actions");
+    const rightBtns= wrap.querySelector(".right-actions");
+    let sx=0, dx=0, ts=0, dragging=false, moved=false;
+
+    // 他が開いていたら閉じる
+    const closeAll = ()=>{
+      if(gOpenSideId && gOpenSideId!==wrap.dataset.id){
+        const ww = document.querySelector(`.card-wrap[data-id="${gOpenSideId}"]`);
+        if(ww) settleTo(ww, 0);
+      }
+      gOpenSideId = null;
+    };
+
+    const onStart = (clientX)=>{
+      dragging=true; moved=false; sx=clientX; dx=0; ts=performance.now();
+      track.style.transition="none";
+    };
+    const onMove = (clientX)=>{
+      if(!dragging) return;
+      dx = clientX - sx;
+      if(Math.abs(dx)>1) moved=true;
+      // 抵抗：大きく引き過ぎない
+      const shown = clamp(dx, -FULL_X-40, FULL_X-40);
+      track.style.transform = `translateX(${shown}px)`;
+    };
+    const onEnd = ()=>{
+      if(!dragging) return;
+      dragging=false;
+      track.style.transition="transform .18s ease";
+      const dt = Math.max(1, performance.now()-ts);
+      const v = dx/dt; // px/ms
+      const absdx = Math.abs(dx);
+
+      // タップ扱い
+      if(!moved || Math.abs(dx)<=TAP_MAX_MOVE){
+        // 既存の開きがあれば閉じる、なければ詳細をトグルは「bindTapToDetail」で処理
+        settleTo(wrap, 0);
+        return;
+      }
+
+      // 即時実行の判定（速度 or 量）
+      if(dx >= FULL_X || v>=V_FULL){
+        // 左大→完了
+        settleTo(wrap, 0);
+        onAction(wrap,"complete");
+        return;
+      }
+      if(dx <= -FULL_X || v<=-V_FULL){
+        // 右大→削除（確認）
+        settleTo(wrap, 0);
+        confirmDelete(wrap);
+        return;
+      }
+
+      // スナップ：軽い露出で固定
+      if(dx > SNAP_X){
+        settleTo(wrap, SNAP_X); // 左露出（完了・ピン）
+        wrap.classList.add("open-left"); wrap.classList.remove("open-right");
+        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id);
+        return;
+      }
+      if(dx < -SNAP_X){
+        settleTo(wrap, -SNAP_X); // 右露出（詳細・削除）
+        wrap.classList.add("open-right"); wrap.classList.remove("open-left");
+        gOpenSideId = wrap.dataset.id; closeOtherDetails(wrap.dataset.id);
+        return;
+      }
+
+      // しきい値未満→元へ
+      settleTo(wrap, 0);
+    };
+
+    // クリックで各ボタン動作
+    leftBtns.addEventListener("click", (e)=>{
+      const b = e.target.closest(".btn"); if(!b) return;
+      const act = b.dataset.act;
+      if(act==="complete"){ onAction(wrap,"complete"); }
+      else if(act==="pin"){ onAction(wrap,"pin"); }
+      settleTo(wrap,0);
+    });
+    rightBtns.addEventListener("click", (e)=>{
+      const b = e.target.closest(".btn"); if(!b) return;
+      const act = b.dataset.act;
+      if(act==="detail"){ openDetail(wrap.dataset.id,true); }
+      else if(act==="delete"){ confirmDelete(wrap); }
+      settleTo(wrap,0);
+    });
+
+    // pointer/touch/mouse
+    track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
+    track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
+    track.addEventListener("touchend", onEnd);
+    track.addEventListener("mousedown", e=>onStart(e.clientX));
+    track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX) });
+    track.addEventListener("mouseup", onEnd);
+
+    // 他の露出を閉じる
+    track.addEventListener("pointerdown", closeAll);
+  }
+
+  function settleTo(wrap, x){
+    const track = wrap.querySelector(".track");
+    track.style.transform = `translateX(${x}px)`;
+    if(x===0){ wrap.classList.remove("open-left","open-right"); }
+  }
+  function clamp(v,min,max){ return Math.min(max, Math.max(min,v)); }
+
+  function confirmDelete(wrap){
+    if(!confirm("このタスクを削除しますか？")) return;
+    onAction(wrap,"delete");
+  }
+
+  async function onAction(wrap, action){
+    const id = wrap.dataset.id;
+    try{
+      if(action==="detail"){ openDetail(id,true); return; }
+      // 「未完了⇔完了」切替は complete / uncomplete の2系統にしてます
+      if(action==="uncomplete"){
+        await postAction("complete-undo",{task_id:id,user_id:gUserId});
+        toast("完了を取り消しました");
+      }else if(action==="complete"){
+        await postAction("complete",{task_id:id,user_id:gUserId});
+        toast("完了しました");
+      }else if(action==="pin"){
+        await postAction("toggle-pin",{task_id:id,user_id:gUserId});
+        toast("ピンの切替");
+      }else if(action==="delete"){
+        await postAction("delete",{task_id:id,user_id:gUserId});
+        toast("削除しました");
+      }
+      await loadTasks(gUserId);
+    }catch(e){
+      console.error(e);
+      toast("エラー: "+(e.message||"failed"));
     }
+  }
 
-    // 戻す
-    reset(track, actions, card);
-  };
+  function bindTapToDetail(track){
+    // タップ（クリック）時に詳細開閉（露出してたら閉じるだけ）
+    track.addEventListener("click",(e)=>{
+      // ボタン類はここに来ないが、露出状態なら閉じる優先
+      const wrap = track.closest(".card-wrap");
+      if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
+        settleTo(wrap,0); return;
+      }
+      openDetail(wrap.dataset.id, true);
+    });
+    // 閉じる×、閉じるボタン、保存ボタン
+    const wrap = track.closest(".card-wrap");
+    const det = wrap.querySelector(".detail");
+    det.querySelector("[data-close]")?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
+    det.querySelector('[data-act="detail-cancel"]')?.addEventListener("click",()=>openDetail(wrap.dataset.id,false));
+    det.querySelector('[data-act="detail-save"]')?.addEventListener("click",()=>saveDetail(wrap.dataset.id));
+  }
 
-  actions.addEventListener('touchstart', e=>e.stopPropagation(), {passive:true});
-  actions.addEventListener('touchmove',  e=>e.stopPropagation(), {passive:true});
-  actions.addEventListener('mousedown',  e=>e.stopPropagation());
+  function closeOtherDetails(keepId){
+    if(gOpenDetailId && gOpenDetailId!==keepId){
+      const prev = el(`#detail-${gOpenDetailId}`);
+      if(prev) prev.classList.remove("open");
+    }
+  }
+  function openDetail(id, open){
+    const det = el(`#detail-${id}`); if(!det) return;
+    closeOtherDetails(id);
+    if(open){ det.classList.add("open"); gOpenDetailId = id; }
+    else { det.classList.remove("open"); if(gOpenDetailId===id) gOpenDetailId=null; }
+  }
 
-  track.addEventListener('touchstart', e=>onStart(e.touches[0].clientX), {passive:true});
-  track.addEventListener('touchmove',  e=>onMove(e.touches[0].clientX),  {passive:true});
-  track.addEventListener('touchend', onEnd);
-  track.addEventListener('mousedown', e=>onStart(e.clientX));
-  track.addEventListener('mousemove', e=>{ if(e.buttons===1) onMove(e.clientX); });
-  track.addEventListener('mouseup', onEnd);
-}
+  async function saveDetail(id){
+    // detail / priority / due_at / remind_times[0]
+    const det = el(`#detail-${id}`); if(!det) return;
+    const fields = {};
+    const vDetail = det.querySelector('[data-field="detail"]').value.trim();
+    const vPrio = det.querySelector('[data-field="priority"]').value;
+    const vDue  = det.querySelector('[data-field="due_at"]').value;
+    const vRem0 = det.querySelector('[data-field="remind0"]').value;
 
-async function postAction(action, task_id, fields){
-  try{
-    const body = { action, task_id, user_id:gUserId };
-    if(fields) body.fields = fields;
+    fields.detail = vDetail || null;
+    fields.priority = vPrio ? Number(vPrio) : null;
+    fields.due_at = vDue ? fromLocalDatetimeValue(vDue) : null;
+    fields.remind_times = vRem0 ? [fromLocalDatetimeValue(vRem0)] : [];
+
+    try{
+      await postAction("update",{ task_id:id, user_id:gUserId, fields });
+      toast("保存しました");
+      openDetail(id,false);
+      await loadTasks(gUserId);
+    }catch(e){
+      console.error(e);
+      toast("保存エラー");
+    }
+  }
+
+  /** ===== API ===== */
+  async function postAction(action, body){
     const res = await fetch(ACTION_API_URL, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ action, ...body })
     });
     const j = await res.json().catch(()=>({ok:false}));
-    if(!res.ok || j.ok===false) throw new Error(j.message||'failed');
-    return true;
-  }catch(e){ console.error(e); return false; }
-}
+    if(!res.ok || j.ok===false) throw new Error(j.message||"action failed");
+    return j;
+  }
 
-async function load(){
-  const url = `${LIST_API_URL}?user_id=${encodeURIComponent(gUserId)}`;
-  const res = await fetch(url, {headers:{'Content-Type':'application/json'}});
-  const j = await res.json().catch(()=>null);
-  if(!res.ok || !j || j.ok!==true){ toast('読み込み失敗'); return; }
-  const a=j.pinned||[], b=j.active||[], c=j.completed||[];
-  // status を card に引き渡すため保持
-  gAll=[...a,...b,...c];
-  render();
-}
+  async function loadTasks(userId){
+    if(!userId){
+      const prof = await liff.getProfile();
+      userId = prof.userId; gUserId = userId;
+    }
+    const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
+    const res = await fetch(url, { method:"GET", credentials:"omit", headers:{ "Content-Type":"application/json" } });
+    const payload = await res.json();
+    if(!res.ok || !payload || payload.ok!==true){ toast("読み込み失敗"); return; }
 
-(async function(){
-  await liff.init({liffId:LIFF_ID});
-  if(!liff.isLoggedIn()) liff.login();
-  const prof = await liff.getProfile();
-  gUserId = prof.userId;
-  $('#user-pill').textContent = "You: "+gUserId.slice(-6);
-  await load();
-})();
-</script>
+    // 返却：{pinned,active,completed}
+    const pinned = Array.isArray(payload.pinned)?payload.pinned:[];
+    const active = Array.isArray(payload.active)?payload.active:[];
+    const completed = Array.isArray(payload.completed)?payload.completed:[];
+    gAllTasks = [...pinned, ...active, ...completed];
+    render();
+  }
+
+  /** ===== init ===== */
+  (async function bootstrap(){
+    await liff.init({ liffId: LIFF_ID });
+    if(!liff.isLoggedIn()) liff.login();
+    const prof = await liff.getProfile();
+    gUserId = prof.userId;
+    el("#user-pill").textContent = "You: " + gUserId.slice(-6);
+
+    // 検索
+    el("#q").addEventListener("input",(e)=>{
+      const q = e.target.value.trim().toLowerCase();
+      if(!q){ render(); return; }
+      const filtered = gAllTasks.filter(t =>
+        (t.title||"").toLowerCase().includes(q) ||
+        (t.detail||"").toLowerCase().includes(q)
+      );
+      const { pinned, active, completed } = splitByStatus(filtered);
+      $pinned.hidden = pinned.length===0;
+      $completed.hidden = completed.length===0;
+      $empty.hidden = pinned.length + active.length > 0;
+
+      $pinnedList.innerHTML = sortCombined(pinned).map(cardHTML).join("");
+      $activeList.innerHTML = sortCombined(active).map(cardHTML).join("");
+      $completedList.innerHTML = sortCombined(completed).map(cardHTML).join("");
+      [...document.querySelectorAll(".card-wrap")].forEach(bindSwipeAndButtons);
+      [...document.querySelectorAll(".track")].forEach(bindTapToDetail);
+    });
+    el("#reload").onclick = () => loadTasks(gUserId);
+
+    await loadTasks(gUserId);
+  })();
+  </script>
 </body>
 </html>
