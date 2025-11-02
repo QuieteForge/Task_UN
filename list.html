@@ -1,630 +1,282 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LIST｜タスク一覧</title>
-    <style>
-      :root {
-        --bg: #f7f7f8;
-        --card: #fff;
-        --ink: #111;
-        --sub: #666;
-        --line: #e9e9ec;
-        --pill: #eef2ff;
-        --accent: #3957ff;
-        --ok: #16a34a;
-        --warn: #eab308;
-        --danger: #ef4444;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      html,
-      body {
-        height: 100%;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--ink);
-        font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica,
-          Arial;
-      }
-      header {
-        position: sticky;
-        top: 0;
-        background: var(--card);
-        border-bottom: 1px solid var(--line);
-        z-index: 10;
-      }
-      .bar {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        justify-content: space-between;
-        padding: 12px 16px;
-      }
-      .title {
-        font-weight: 650;
-        letter-spacing: 0.2px;
-      }
-      .pill {
-        padding: 6px 10px;
-        border-radius: 999px;
-        background: var(--pill);
-        font-size: 12px;
-      }
-      main {
-        padding: 14px;
-        max-width: 720px;
-        margin: 0 auto;
-      }
-      .section {
-        margin: 18px 0;
-      }
-      .section h3 {
-        margin: 8px 6px 10px;
-        font-size: 13px;
-        color: var(--sub);
-        font-weight: 600;
-      }
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LIST｜タスク</title>
+<link rel="preconnect" href="https://static.line-scdn.net">
+<style>
+  :root{
+    --bg:#f7f7f8;--card:#fff;--ink:#111;--sub:#666;--line:#e9e9ec;
+    --pill:#eef2ff;--accent:#3957ff;--ok:#16a34a;--warn:#eab308;--danger:#ef4444;
+  }
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:10}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
+  .title{font-weight:650}
+  .pill{padding:6px 10px;border-radius:999px;background:var(--pill);font-size:12px}
+  main{padding:14px;max-width:720px;margin:0 auto}
+  h3{margin:10px 6px;color:var(--sub);font-size:13px}
+  .card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;margin:10px 0;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  .row{display:flex;align-items:center;gap:8px;padding:12px 14px}
+  .titleTxt{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta{display:flex;gap:8px;color:var(--sub);font-size:12px}
+  .chip{padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+  .pin{color:var(--accent)}
+  .ghost{opacity:.45}
 
-      .card {
-        position: relative;
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        padding: 12px 14px;
-        margin: 10px 0;
-        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .titleTxt {
-        flex: 1;
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .meta {
-        display: flex;
-        gap: 8px;
-        color: var(--sub);
-        font-size: 12px;
-      }
-      .due {
-        padding: 2px 8px;
-        border-radius: 999px;
-        border: 1px solid var(--line);
-      }
-      .pin {
-        font-size: 12px;
-        color: var(--accent);
-      }
+  /* swipe */
+  .swipe-wrap{position:relative;overflow:hidden;border-radius:16px}
+  .actions{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 8px;opacity:0;pointer-events:none;transition:opacity .15s}
+  .btn{pointer-events:auto;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:12px}
+  .btn.ok{border-color:#c7ecd1;color:var(--ok);background:#ecfdf5}
+  .btn.warn{border-color:#fde68a;color:var(--warn);background:#fffbeb}
+  .btn.danger{border-color:#fecaca;color:var(--danger);background:#fef2f2}
+  .track{position:relative;touch-action:pan-y;background:#fff;z-index:1;transition:transform .18s ease}
+  .swipe-wrap.menu .actions{opacity:1;pointer-events:auto}
+  .swipe-wrap.menu .track{transform:translateX(-96px)}
 
-      /* swipe */
-      .swipe-wrap {
-        position: relative;
-        overflow: hidden;
-        border-radius: 16px;
-      }
-      .actions {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0 8px;
-        pointer-events: none;
-      }
-      .btn {
-        pointer-events: auto;
-        padding: 8px 10px;
-        border-radius: 10px;
-        border: 1px solid var(--line);
-        background: var(--card);
-        font-size: 12px;
-      }
-      .btn.ok {
-        border-color: #c7ecd1;
-        color: var(--ok);
-        background: #ecfdf5;
-      }
-      .btn.warn {
-        border-color: #fde68a;
-        color: var(--warn);
-        background: #fffbeb;
-      }
-      .btn.danger {
-        border-color: #fecaca;
-        color: var(--danger);
-        background: #fef2f2;
-      }
-      .track {
-        position: relative;
-        touch-action: pan-y;
-        background: var(--card);
-      }
-      .ghost {
-        opacity: 0.45;
-      }
+  .empty{color:var(--sub);text-align:center;padding:36px 12px}
+  #debug{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #eee;padding:8px;margin:8px;border-radius:8px}
+  .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.25s}
+  .toast.show{opacity:1}
+</style>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="title">LIST｜タスク</div>
+    <div id="user-pill" class="pill">loading…</div>
+  </div>
+</header>
 
-      .empty {
-        color: var(--sub);
-        text-align: center;
-        padding: 36px 12px;
-      }
-      .skeleton {
-        height: 60px;
-        border-radius: 16px;
-        border: 1px solid var(--line);
-        background: linear-gradient(90deg, #f5f5f7, #eee, #f5f5f7);
-        background-size: 200% 100%;
-        animation: s 1.1s linear infinite;
-      }
-      @keyframes s {
-        0% {
-          background-position: 200% 0;
-        }
-        100% {
-          background-position: -200% 0;
-        }
-      }
+<main>
+  <div style="display:flex;gap:8px;padding:8px">
+    <input id="q" placeholder="検索（タイトル/詳細）" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff">
+    <button id="reload" style="padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#fff">再読込</button>
+  </div>
 
-      .toolbar {
-        display: flex;
-        gap: 8px;
-        padding: 8px;
-      }
-      .toolbar input {
-        flex: 1;
-        padding: 10px 12px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: #fff;
-      }
-      .toolbar button {
-        padding: 10px 12px;
-        border-radius: 12px;
-        border: 1px solid var(--line);
-        background: #fff;
-      }
-      .toast {
-        position: fixed;
-        left: 50%;
-        bottom: 18px;
-        transform: translateX(-50%);
-        background: #111;
-        color: #fff;
-        padding: 10px 14px;
-        border-radius: 999px;
-        font-size: 13px;
-        opacity: 0;
-        transition: 0.25s;
-      }
-      .toast.show {
-        opacity: 1;
-      }
-      /* メニューを展開した状態を固定表示 */
-      .swipe-wrap.menu .actions{
-        opacity:1 !important;
-        pointer-events:auto !important;
-      }
-      .swipe-wrap.menu .track{
-        transform:translateX(-96px); /* メニュー分だけ見せる */
-        transition:transform .18s ease;
-      }
-      
-      /* アクションがタップできるように */
-      .actions{
-        transition:opacity .15s ease;
-        z-index:2;          /* トラックより前面 */
-      }
-      .track{
-        position:relative;
-        z-index:1;
-      }
+  <section id="pinned-sec" hidden>
+    <h3>📌 ピン留め</h3>
+    <div id="pinned-list"></div>
+  </section>
 
+  <section>
+    <h3>📝 未完了</h3>
+    <div id="active-list"></div>
+  </section>
 
-    </style>
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  </head>
-  <body>
-    <header>
-      <div class="bar">
-        <div class="title">LIST｜タスク</div>
-        <div class="pill" id="user-pill">loading…</div>
-      </div>
-    </header>
+  <section id="completed-sec" hidden>
+    <h3>✅ 完了（直近1週間）</h3>
+    <div id="completed-list"></div>
+  </section>
 
-    <main>
-      <div class="toolbar">
-        <input id="q" placeholder="検索（タイトル/詳細）" />
-        <button id="reload">再読込</button>
-      </div>
+  <div id="empty" class="empty" hidden>まだタスクがありません。LINEでメッセージを送ると追加されます。</div>
+</main>
 
-      <div id="pinned" class="section" hidden>
-        <h3>📌 ピン留め</h3>
-        <div id="pinned-list"></div>
-      </div>
+<pre id="debug"></pre>
+<div id="toast" class="toast"></div>
 
-      <div id="active" class="section">
-        <h3>📝 未完了</h3>
-        <div id="active-list"></div>
-      </div>
+<script>
+/** ====== 設定 ====== */
+const LIFF_ID       = "2008311584-NdJqOqMn";
+const LIST_API_URL  = "https://lumicreate.xvps.jp/webhook/webhook-list";
+const ACTION_API_URL= "https://lumicreate.xvps.jp/webhook/webhook-action";
+const DEBUG = true;
 
-      <div id="completed" class="section" hidden>
-        <h3>✅ 完了（直近1週間）</h3>
-        <div id="completed-list"></div>
-      </div>
+/** ====== ユーティリティ ====== */
+const $ = sel => document.querySelector(sel);
+function dbg(...a){ if(!DEBUG) return; const d=$("#debug"); if(d) d.textContent += a.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ')+"\n"; }
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1400); }
+function esc(s){ return String(s||"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function fmtJST(iso){ if(!iso) return ""; const d=new Date(iso); return d.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}); }
 
-      <div id="empty" class="empty" hidden>
-        まだタスクがありません。LINEでメッセージを送ると追加されます。
-      </div>
-    </main>
+/** ====== 状態 ====== */
+let gUserId=null, gAll=[];
 
-    <pre id="debug" style="white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace; background:#fff;border:1px solid #eee; padding:8px; margin:8px; border-radius:8px;"></pre>
-
-    <div id="toast" class="toast"></div>
-
-    <script>
-/** =================== 設定 =================== */
-const LIST_API_URL   = "https://lumicreate.xvps.jp/webhook/webhook-list";
-const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action";
-/* LIFF ID は URLの ?liffId=... を最優先で使い、不在のときに固定IDを使う */
-const LIFF_ID = new URL(location.href).searchParams.get("liffId") || "2008311584-NdJqOqMn";
-/** ============================================ */
-
-/* 画面ログ */
-function dbg(...a){
-  const p = document.getElementById('debug');
-  if(!p) return;
-  p.textContent += a.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ') + '\n';
-}
-window.onerror = (m,s,l,c,e)=>{ dbg('window.onerror:', m, s+':'+l); };
-window.onunhandledrejection = (ev)=>{ dbg('unhandledrejection:', String(ev.reason||ev)); };
-
-let gUserId = null;
-let gAllTasks = [];
-
-const el = (sel) => document.querySelector(sel);
-const $pinned = el("#pinned");
-const $pinnedList = el("#pinned-list");
-const $activeList = el("#active-list");
-const $completed = el("#completed");
-const $completedList = el("#completed-list");
-const $empty = el("#empty");
-
-function toast(msg){
-  const t = el("#toast"); t.textContent = msg;
-  t.classList.add("show"); setTimeout(()=>t.classList.remove("show"), 1400);
-}
-function fmtJST(iso){
-  if(!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString("ja-JP",{ timeZone:"Asia/Tokyo", month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" });
-}
-function sortTasks(arr){
-  return arr.slice().sort((a,b)=>{
-    const ad = new Date(a.due_at||0).getTime();
-    const bd = new Date(b.due_at||0).getTime();
-    if(ad!==bd) return ad-bd;
-    const ap = Number.isFinite(a.priority)?a.priority:-1;
-    const bp = Number.isFinite(b.priority)?b.priority:-1;
-    return bp-ap;
-  });
-}
+/** ====== 描画 ====== */
 function splitByStatus(all){
-  const now = Date.now(), weekAgo = now - 7*24*3600*1000;
+  const now=Date.now(), weekAgo=now-7*24*3600*1000;
   const pinned=[], active=[], completed=[];
   for(const t of all){
     if(t.pinned){ pinned.push(t); continue; }
-    if(t.status==='completed'){
-      const cAt = t.completed_at? new Date(t.completed_at).getTime():0;
-      if(cAt>=weekAgo) completed.push(t);
+    if(t.status==="completed"){
+      const ct=t.completed_at?new Date(t.completed_at).getTime():0;
+      if(ct>=weekAgo) completed.push(t);
       continue;
     }
-    if(t.status==='deleted' || t.status==='archived') continue;
+    if(t.status==="deleted"||t.status==="archived") continue;
     active.push(t);
   }
-  return { pinned:pinned.slice(0,3), active, completed };
+  const byDue=(a,b)=>{
+    const ad=new Date(a.due_at||0).getTime(), bd=new Date(b.due_at||0).getTime();
+    if(ad!==bd) return ad-bd;
+    const ap=Number.isFinite(a.priority)?a.priority:-1, bp=Number.isFinite(b.priority)?b.priority:-1;
+    return bp-ap;
+  };
+  return { pinned:pinned.sort(byDue).slice(0,3), active:active.sort(byDue), completed:completed.sort(byDue) };
 }
-function cardHTML(t) {
-  const dueTxt = fmtJST(t.due_at);
-  const pin = t.pinned ? '<span class="pin">📌</span>' : "";
-  const ghost = t.status === "completed" ? " ghost" : "";
+
+function cardHTML(t){
+  const due=fmtJST(t.due_at), ghost=t.status==="completed"?" ghost":"";
+  const pin=t.pinned?'<span class="pin">📌</span>':'';
+  const leftBtn = t.status==="completed" ? '<button class="btn ok" data-act="uncomplete">取消</button>' : '<button class="btn ok" data-act="complete">完了</button>';
   return `
-  <div class="swipe-wrap card${ghost}" data-id="${t.id}" data-status="${t.status || 'active'}">
+  <div class="swipe-wrap card${ghost}" data-id="${t.id}" data-status="${t.status||'active'}">
     <div class="actions">
+      <div style="display:flex;gap:6px">${leftBtn}<button class="btn warn" data-act="remind">ﾘﾏｲﾝﾄﾞ</button></div>
       <div style="display:flex;gap:6px">
-        <button class="btn ok"    data-act="complete">完了</button>
-        <button class="btn warn"  data-act="remind">ﾘﾏｲﾝﾄﾞ</button>
-      </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn"        data-act="pin">${t.pinned ? "ピン解除" : "ピン"}</button>
-        <button class="btn"        data-act="detail">詳細</button>
+        <button class="btn" data-act="pin">${t.pinned?"ピン解除":"ピン"}</button>
+        <button class="btn" data-act="detail">詳細</button>
         <button class="btn danger" data-act="delete">削除</button>
       </div>
     </div>
     <div class="track">
       <div class="row">
-        <div class="titleTxt">${pin}${escapeHTML(t.title || "(無題)")}</div>
-        <div class="meta"><span class="due">⏰ ${escapeHTML(dueTxt)}</span>${
-          Number.isFinite(t.priority) ? `<span class="due">★${t.priority}</span>` : ""
-        }</div>
+        <div class="titleTxt">${pin}${esc(t.title||"(無題)")}</div>
+        <div class="meta"><span class="chip">⏰ ${esc(due)}</span>${Number.isFinite(t.priority)?`<span class="chip">★${t.priority}</span>`:""}</div>
       </div>
     </div>
   </div>`;
 }
 
-function escapeHTML(s){
-  return String(s||"").replace(/[&<>\"']/g,(c)=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+function render(){
+  const {pinned,active,completed}=splitByStatus(gAll);
+  $("#pinned-sec").hidden = pinned.length===0;
+  $("#completed-sec").hidden = completed.length===0;
+  $("#empty").hidden = (pinned.length+active.length)>0;
+
+  $("#pinned-list").innerHTML   = pinned.map(cardHTML).join("");
+  $("#active-list").innerHTML   = active.map(cardHTML).join("");
+  $("#completed-list").innerHTML= completed.map(cardHTML).join("");
+
+  [...document.querySelectorAll(".track")].forEach(bindSwipe);
+  $(".title").textContent = `LIST｜タスク（${gAll.length}件）`;
+  dbg("render() items=", gAll.length, "tracks=", document.querySelectorAll(".track").length);
 }
-function bindSwipe(track) {
-  const wrap    = track.parentElement;          // .swipe-wrap
-  const actions = wrap.querySelector(".actions");
 
-  // しきい値
-  const SW_MENU   = 36;   // 軽く：メニュー開閉 or ピン
-  const SW_ACTION = 120;  // 強く：確定アクション（削除/完了/取消）
+/** ====== スワイプ ====== */
+function bindSwipe(track){
+  const wrap=track.parentElement, actions=wrap.querySelector(".actions");
+  const SW_MENU=36, SW_ACTION=120;
+  let sx=0, dx=0, active=false;
 
-  let sx = 0, dx = 0, active = false;
+  const isOpen = ()=>wrap.classList.contains("menu");
+  const open   = ()=>{ closeAll(); wrap.classList.add("menu"); actions.style.opacity=1; };
+  const close  = ()=>{ wrap.classList.remove("menu"); actions.style.opacity=0; track.style.transform="translateX(0)"; };
 
-  const isMenuOpen = () => wrap.classList.contains('menu');
-  const openMenu   = () => { closeAllMenus(); wrap.classList.add('menu'); actions.style.opacity = 1; };
-  const closeMenu  = () => { wrap.classList.remove('menu'); actions.style.opacity = 0; track.style.transform = "translateX(0)"; };
+  function closeAll(){ document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{ w.classList.remove("menu"); const a=w.querySelector(".actions"), tr=w.querySelector(".track"); if(a) a.style.opacity=0; if(tr) tr.style.transform="translateX(0)"; }); }
 
-  function closeAllMenus(){
-    document.querySelectorAll('.swipe-wrap.menu').forEach(w=>{
-      w.classList.remove('menu');
-      const act = w.querySelector('.actions');
-      const trk = w.querySelector('.track');
-      if (act) act.style.opacity = 0;
-      if (trk) trk.style.transform = 'translateX(0)';
-    });
-  }
+  const start=x=>{ active=true; sx=x; dx=0; track.style.transition="none"; };
+  const move =x=>{
+    if(!active) return;
+    dx=x-sx;
+    if(isOpen()){ if(dx>16) close(); return; }
+    track.style.transform=`translateX(${dx}px)`;
+    actions.style.opacity=Math.min(1,Math.abs(dx)/80);
+  };
+  const end =async ()=>{
+    track.style.transition="transform .18s ease";
+    if(isOpen()){ if(Math.abs(dx)<12) close(); active=false; dx=0; return; }
 
-  const onStart = (x) => {
-    active = true;
-    sx = x;
-    dx = 0;
-    track.style.transition = "none";
+    let act=null;
+    if(dx<=-SW_ACTION) act="delete";
+    else if(dx>=SW_ACTION) act=(wrap.dataset.status==="completed")?"uncomplete":"complete";
+    else if(dx<=-SW_MENU) open();
+    else if(dx>=SW_MENU) act="pin";
+
+    if(!isOpen()){ track.style.transform="translateX(0)"; actions.style.opacity=0; }
+
+    active=false; const id=wrap.dataset.id; dx=0;
+    if(!act) return;
+    try{ await runAction(id,act); }catch(e){ console.error(e); toast("エラー: "+(e.message||"failed")); }
   };
 
-  const onMove = (x) => {
-    if (!active) return;
-    dx = x - sx;
-
-    // メニュー展開中：右に少し引いたら閉じる
-    if (isMenuOpen()) {
-      if (dx > 16) closeMenu();
-      return;
-    }
-
-    // 通常：指に追従
-    track.style.transform = `translateX(${dx}px)`;
-    actions.style.opacity = Math.min(1, Math.abs(dx) / 80);
-  };
-
-  const onEnd = async () => {
-    track.style.transition = "transform .18s ease";
-
-    // メニュー開いてる→タップっぽければ閉じるだけ
-    if (isMenuOpen()) {
-      if (Math.abs(dx) < 12) closeMenu();
-      active = false; dx = 0; return;
-    }
-
-    // 決定
-    let act = null;
-    if (dx <= -SW_ACTION) {
-      act = "delete";                         // 強く左＝削除
-    } else if (dx >=  SW_ACTION) {
-      // 強く右＝完了／完了取消（トグル）
-      const status = wrap.dataset.status || 'active';
-      act = (status === 'completed') ? "uncomplete" : "complete";
-    } else if (dx <= -SW_MENU) {
-      openMenu();                             // 軽く左＝メニュー開く
-    } else if (dx >=  SW_MENU) {
-      act = "pin";                            // 軽く右＝ピン
-    }
-
-    // 戻す（メニューは openMenu 内で固定）
-    if (!isMenuOpen()) {
-      track.style.transform = "translateX(0)";
-      actions.style.opacity = 0;
-    }
-
-    const id = wrap.dataset.id;
-    active = false;
-    dx = 0;
-
-    if (!act) return;
-
-    try {
-      await runAction(id, act);
-    } catch (e) {
-      console.error(e);
-      toast("エラー: " + (e.message || "failed"));
-      return;
-    }
-  };
-
-  // メニュー内ボタン
-  wrap.querySelectorAll(".btn").forEach((b) => {
-    b.addEventListener("click", async (e) => {
-      const id  = wrap.dataset.id;
-      const act = e.currentTarget.dataset.act;
-      closeMenu();
-
-      if (act === "detail") {
-        alert("詳細は別画面へ遷移予定\n（ここでは簡易表示のみ）");
-        return;
-      }
-      if (act === "delete") {
-        const ok = confirm("このタスクを削除しますか？");
-        if (!ok) return;
-      }
-      try { await runAction(id, act); }
-      catch(err){ console.error(err); toast("エラー: " + (err.message || "failed")); }
+  wrap.querySelectorAll(".btn").forEach(b=>{
+    b.addEventListener("click", async (e)=>{
+      const id=wrap.dataset.id, act=e.currentTarget.dataset.act;
+      if(act==="detail"){ alert("詳細は別画面予定"); return; }
+      if(act==="delete" && !confirm("このタスクを削除しますか？")) return;
+      close();
+      try{ await runAction(id,act); }catch(err){ console.error(err); toast("エラー: "+(err.message||"failed")); }
     });
   });
 
-  // タッチ/マウス
-  track.addEventListener("touchstart", (e)=>onStart(e.touches[0].clientX), { passive:true });
-  track.addEventListener("touchmove",  (e)=>onMove(e.touches[0].clientX),  { passive:true });
-  track.addEventListener("touchend", onEnd);
-
-  track.addEventListener("mousedown", (e)=>onStart(e.clientX));
-  track.addEventListener("mousemove", (e)=>{ if (e.buttons === 1) onMove(e.clientX); });
-  track.addEventListener("mouseup", onEnd);
-
-  // 画面タップで他カードのメニューを閉じる
-  document.addEventListener('click', (e)=>{
-    if (!wrap.contains(e.target)) closeAllMenus();
-  });
+  track.addEventListener("touchstart",e=>start(e.touches[0].clientX),{passive:true});
+  track.addEventListener("touchmove", e=>move(e.touches[0].clientX), {passive:true});
+  track.addEventListener("touchend", end);
+  track.addEventListener("mousedown", e=>start(e.clientX));
+  track.addEventListener("mousemove", e=>{ if(e.buttons===1) move(e.clientX); });
+  track.addEventListener("mouseup", end);
+  document.addEventListener("click", e=>{ if(!wrap.contains(e.target)) closeAll(); });
 }
 
-
-function actionLabel(a){
-  return ({ pin:"ピン", complete:"完了", uncomplete:"取消", delete:"削除", remind:"リマインド", menu:"メニュー" }[a] || a);
-}
-
-async function runAction(id, action) {
-  try {
-    if (action === "detail") { alert("詳細は別画面へ遷移予定"); return; }
-    if (action === "delete") { const ok = confirm("このタスクを削除しますか？"); if (!ok) return; }
-
-    // 通常通り Webhook へ
-    const res = await fetch(ACTION_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, task_id: id, user_id: gUserId }),
-    });
-    const j = await res.json().catch(()=>({ok:false}));
-    if (!res.ok || j.ok === false) throw new Error(j.message || "action failed");
-
-    toast(actionLabel(action) + "しました");
-    await loadTasks(gUserId);
-  } catch (err) {
-    console.error(err);
-    toast("エラー: " + (err.message || "failed"));
-  }
-}
-
+/** ====== API ====== */
 async function loadTasks(userId){
-  dbg('loadTasks userId=', userId);
-  if(!userId){
-    try{ const prof=await liff.getProfile(); userId=prof.userId; gUserId=userId; }
-    catch(e){ dbg('getProfile failed:', e.code||'', e.message||e); toast('ユーザー取得に失敗'); return; }
-  }
-  const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
-  dbg('GET', url);
+  dbg("loadTasks userId=", userId);
+  const url=`${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
   let res, payload;
   try{
-    res = await fetch(url, { method:'GET', credentials:'omit', headers:{'Content-Type':'application/json'} });
+    res = await fetch(url,{method:"GET",credentials:"omit",headers:{"Content-Type":"application/json"}});
     payload = await res.json();
-  }catch(e){
-    dbg('fetch/json error:', e.message||e); toast('読み込み失敗（通信/JSON）'); return;
+  }catch(e){ dbg("fetch/json error:", e.message||e); toast("読み込み失敗"); return; }
+  dbg("status=", res.status, "payload.ok=", payload && payload.ok);
+
+  if(!res.ok || !payload || payload.ok!==true){ toast(`読み込み失敗（HTTP ${res && res.status}）`); return; }
+
+  // 互換: {ok:true,data:[]} or {ok:true,pinned/active/completed}
+  if(Array.isArray(payload.data)){
+    gAll = payload.data;
+  }else{
+    const P = Array.isArray(payload.pinned)?payload.pinned:[];
+    const A = Array.isArray(payload.active)?payload.active:[];
+    const C = Array.isArray(payload.completed)?payload.completed:[];
+    gAll = [...P,...A,...C];
   }
-  dbg('status=', res.status, 'payload.ok=', payload && payload.ok);
-  if(!res.ok || !payload || payload.ok!==true){ toast('読み込み失敗（HTTP '+(res&&res.status)+')'); return; }
-  const pinned = Array.isArray(payload.pinned)?payload.pinned:[], active = Array.isArray(payload.active)?payload.active:[], completed = Array.isArray(payload.completed)?payload.completed:[];
-  gAllTasks = [...pinned, ...active, ...completed];
-  dbg('gAllTasks.length=', gAllTasks.length);
+  dbg("gAll length=", gAll.length);
   render();
 }
 
-    function render(){
-      dbg('render() in items=', gAllTasks.length);
-    
-      const { pinned, active, completed } = splitByStatus(gAllTasks);
-      $pinned.hidden   = pinned.length === 0;
-      $completed.hidden= completed.length === 0;
-    
-      // HTML 差し込み（ここは例外起きにくい）
-      $pinnedList.innerHTML    = sortTasks(pinned).map(TML).join("");
-      $activeList.innerHTML    = sortTasks(active).map(cardHTML).join("");
-      $completedList.innerHTML = sortTasks(completed).map(cardHTML).join("");
-      $empty.hidden = (pinned.length + active.length) > 0;
-    
-      // ★ スワイプ初期化は try/catch でガード
-      try {
-        const tracks = document.querySelectorAll(".track");
-        tracks.forEach(t => { try { bindSwipe(t); } catch(e) { dbg('bindSwipe err:', e.message||e); }});
-        dbg('tracks=', tracks.length);
-      } catch(e) {
-        dbg('query .track failed:', e.message||e);
-      }
-    
-      // ★ タイトル要素がなければ書き換えない
-      const ttl = document.querySelector('.title');
-      if (ttl) {
-        ttl.textContent = 'LIST｜タスク （debug受信:'+ gAllTasks.length +'件）';
-      } else {
-        dbg('no .title element');
-      }
-    
-      const activeDom = document.querySelectorAll('#active-list .card').length;
-      dbg('render() out activeDom=', activeDom);
-    }
+function actionLabel(a){ return ({pin:"ピン",complete:"完了",uncomplete:"取消",delete:"削除",remind:"ﾘﾏｲﾝﾄﾞ"}[a]||a); }
 
-
-async function bootstrap(){
-  dbg('LIFF_ID=', LIFF_ID);
-  try{
-    await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
-    dbg('liff.init OK');
-  }catch(e){
-    dbg('liff.init ERROR:', e.code||'', e.message||e);
-    toast('LIFF初期化に失敗: '+(e.message||e));
-    return;
-  }
-  const ctx = liff.getContext?.(); dbg('context', ctx||{});
-  if(!liff.isLoggedIn()){ dbg('not logged-in -> login'); liff.login(); return; }
-
-  try{
-    const prof = await liff.getProfile();
-    gUserId = prof.userId;
-    document.getElementById('user-pill').textContent = 'You: '+ gUserId.slice(-6);
-    dbg('profile OK userId=', gUserId);
-  }catch(e){
-    dbg('getProfile ERROR:', e.code||'', e.message||e);
-    toast('プロフィール取得に失敗'); return;
-  }
-
-  document.getElementById('reload').onclick = ()=>loadTasks(gUserId);
-  document.getElementById('q').addEventListener('input', (e)=>{
-    const q = e.target.value.trim().toLowerCase();
-    if(!q){ render(); return; }
-    const filtered = gAllTasks.filter(t=>(t.title||'').toLowerCase().includes(q) || (t.detail||'').toLowerCase().includes(q));
-    const { pinned, active, completed } = splitByStatus(filtered);
-    $pinned.hidden = pinned.length===0; $completed.hidden = completed.length===0; $empty.hidden=true;
-    $pinnedList.innerHTML   = sortTasks(pinned).map(cardHTML).join("");
-    $activeList.innerHTML   = sortTasks(active).map(cardHTML).join("");
-    $completedList.innerHTML= sortTasks(completed).map(cardHTML).join("");
-    [...document.querySelectorAll(".track")].forEach(bindSwipe);
-  });
-
+async function runAction(id, action){
+  const body = JSON.stringify({ action, task_id:id, user_id:gUserId });
+  const res = await fetch(ACTION_API_URL,{ method:"POST", headers:{ "Content-Type":"application/json" }, body });
+  const j = await res.json().catch(()=>({ok:false}));
+  if(!res.ok || j.ok===false) throw new Error(j.message||"action failed");
+  toast(actionLabel(action)+"しました");
   await loadTasks(gUserId);
 }
 
-bootstrap();
+/** ====== 起動 ====== */
+(async function bootstrap(){
+  try{
+    dbg("LIFF_ID=", LIFF_ID);
+    await liff.init({ liffId: LIFF_ID });
+    dbg("liff.init OK");
+    if(!liff.isLoggedIn()) liff.login();
+    const ctx = liff.getContext(); dbg("context", ctx);
+    const prof = await liff.getProfile(); dbg("profile OK userId=", prof.userId);
+    gUserId = prof.userId;
+    $("#user-pill").textContent = "You: " + gUserId.slice(-6);
+
+    $("#reload").onclick = ()=>loadTasks(gUserId);
+    $("#q").addEventListener("input", e=>{
+      const q=e.target.value.trim().toLowerCase();
+      if(!q){ render(); return; }
+      const filt = gAll.filter(t=>(t.title||"").toLowerCase().includes(q) || (t.detail||"").toLowerCase().includes(q));
+      const bak = gAll; gAll=filt; render(); gAll=bak;
+    });
+
+    await loadTasks(gUserId);
+  }catch(e){
+    console.error(e);
+    dbg("bootstrap error:", e.message||e);
+    toast("初期化に失敗");
+  }
+})();
 </script>
-
-  </body>
+</body>
 </html>
-
-
-
-
-
-
-
-
-
