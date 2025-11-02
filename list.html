@@ -161,15 +161,18 @@ function bindSwipe(track){
   const wrap=track.parentElement, actions=wrap.querySelector(".actions"), id=wrap.dataset.id;
 
   // thresholds
-  const LIGHT_DIST=40;        // 軽スワイプ最低距離
-  const SNAP_DIST=84;         // スナップ位置（ボタンに合わせる）
-  const STRONG_DIST=140;      // 強スワイプ距離
-  const VELO_STRONG=0.6;      // 強スワイプ速度(px/ms)
-  const UNSNAP_BACK=24;       // スナップ解除に必要な逆方向距離
+  // thresholds（既存の同名定数を置き換え）
+  const LIGHT_DIST   = 32;   // 軽スワイプ最小距離
+  const SNAP_DIST    = 96;   // ボタンが見える“止めポイント”
+  const STRONG_DIST  = 200;  // 即実行に行く距離
+  const VELO_STRONG  = 1.0;  // 即実行の速度(px/ms)  ← 少し厳しめ
+  const VELO_SNAP_MAX= 0.55; // スナップ許容の上限速度（これより遅ければスナップ）
+  const UNSNAP_BACK  = 24;   // スナップ解除の戻し距離
+
 
   let sx=0, dx=0, active=false, t0=0;
   let snapped=null;           // null | 'left' | 'right'
-  let lastX=0, lastTime=0;    // 慣性用
+  let lastX=0, lastTime=0, lastVel=0; // ★ 追加
 
   const setTransform = (x)=>{ track.style.transform=`translateX(${x}px)` };
   const showActions  = (on)=>{ actions.style.opacity = on?1:0 };
@@ -190,70 +193,82 @@ function bindSwipe(track){
     track.style.transition="none";
   };
   const move = (x)=>{
-    if(!active) return;
-    const now=performance.now();
-    dx = x - sx;
+  if(!active) return;
+  const now = performance.now();
+  dx = x - sx;
 
-    // スナップ中に逆方向へ少し戻したら解除
-    if(snapped && ((snapped==='right' && dx< -UNSNAP_BACK) || (snapped==='left' && dx> UNSNAP_BACK))){
-      snapped=null; showActions(false);
-    }
+  // スナップ中に逆方向へ少し戻したら解除
+  if(snapped && ((snapped==='right' && dx< -UNSNAP_BACK) || (snapped==='left' && dx> UNSNAP_BACK))){
+    snapped=null; showActions(false);
+  }
 
-    // スナップ中は片側に固定（片側に張り付かせる）
-    if(snapped){
-      setTransform(snapped==='right'? SNAP_DIST : -SNAP_DIST);
-      // 同方向に大きく引っ張ったら “強スワイプ” で即実行
-      const pull = snapped==='right' ? (x - (sx+SNAP_DIST)) : ((sx-SNAP_DIST) - x);
-      if(Math.abs(pull) > STRONG_DIST/2){ /* 見た目は固定のまま */ }
-    }else{
-      setTransform(dx);
-      showActions(Math.min(1, Math.abs(dx)/80));
-    }
+  if(snapped){
+    setTransform(snapped==='right'? SNAP_DIST : -SNAP_DIST);
+  }else{
+    setTransform(dx);
+    showActions(Math.min(1, Math.abs(dx)/80));
+  }
 
-    lastX=x; lastTime=now;
-  };
+  // ★ 直近の速度(px/ms)：最後の“区間”で計測
+  const dt = Math.max(1, now - lastTime);
+  lastVel = Math.abs(x - lastX) / dt;
+
+  lastX = x;
+  lastTime = now;
+};
+
   const end = async ()=>{
     if(!active) return;
-    const dt=Math.max(1, performance.now()-t0);
-    const v=Math.abs(dx)/dt; // px/ms
-    const dir=dx>0?'right':'left';
-    track.style.transition="transform .18s ease";
-
-    // 強スワイプ判定（速度 or 距離）
-    const strong = (Math.abs(dx)>=STRONG_DIST) || (v>=VELO_STRONG);
-
-    if(strong){
-      // 即アクション
-      const t=gAll.find(x=>x.id===id); if(!t){ reset(); return; }
-      if(dir==='right'){
-        await runAction(id, t.status==='completed'?'uncomplete':'complete');
-      }else{
-        if(confirm("このタスクを削除しますか？")) await runAction(id,'delete');
+    track.style.transition = "transform .18s ease";
+  
+    const absDx = Math.abs(dx);
+    const dir   = dx>0 ? 'right' : 'left';
+    const v     = lastVel; // 直近速度
+  
+    // ① まず「スナップ優先」：距離がスナップ域に近く、かつゆっくり
+    if (absDx >= SNAP_DIST * 0.7 && v <= VELO_SNAP_MAX) {
+      snapped = dir;
+      setTransform(dir==='right'? SNAP_DIST : -SNAP_DIST);
+      showActions(true);
+      attachButtonHandlers();
+  
+      // タップで閉じる
+      track.onclick = ()=>{
+        snapped=null; reset();
+        track.onclick=null;
+      };
+      active=false; return;
+    }
+  
+    // ② 次に「強スワイプ」：大きく動かした or 速い（ただし“速い”はある程度の移動も必須）
+    const strongByDist = absDx >= STRONG_DIST;
+    const strongByVel  = (v >= VELO_STRONG) && (absDx >= SNAP_DIST * 0.8);
+    const strong = strongByDist || strongByVel;
+  
+    if (strong) {
+      const t = gAll.find(x=>x.id===wrap.dataset.id);
+      if(!t){ reset(); return; }
+  
+      if (dir==='right') {
+        await runAction(wrap.dataset.id, t.status==='completed' ? 'uncomplete' : 'complete');
+      } else {
+        if (confirm("このタスクを削除しますか？")) {
+          await runAction(wrap.dataset.id, 'delete');
+        }
       }
       reset();
       return;
     }
-
-    // 軽スワイプ：スナップ判断
-    if(Math.abs(dx)>=LIGHT_DIST){
-      if(Math.abs(dx) >= SNAP_DIST*0.6){
-        // スナップ確定（片側に止めてボタン操作）
-        snapped = dir;
-        setTransform(dir==='right'?SNAP_DIST:-SNAP_DIST);
-        showActions(true);
-        attachButtonHandlers();
-        // トラックをタップで閉じる（スナップ解除）
-        track.onclick = ()=>{
-          snapped=null; reset();
-          track.onclick=null;
-        };
-        active=false; return;
-      }
+  
+    // ③ しきい値未満：戻す or 軽スワイプ（ボタンは見せない）
+    if (absDx >= LIGHT_DIST) {
+      // 軽く見せたけど“止め”条件を満たさない → 戻す
+      reset();
+    } else {
+      reset();
     }
+};
 
-    // しきい値未満：戻す
-    reset();
-  };
 
   function reset(){
     setTransform(0); showActions(false); active=false; dx=0;
@@ -319,3 +334,4 @@ bootstrap();
 </script>
 </body>
 </html>
+
