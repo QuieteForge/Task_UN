@@ -13,10 +13,7 @@
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{
-      margin:0; background:var(--bg); color:var(--ink);
-      font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    }
+    body{margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     header{position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); z-index:10}
     .bar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 16px}
     .title{font-weight:650; letter-spacing:.2px}
@@ -28,30 +25,26 @@
 
     .card-wrap{position:relative; margin:10px 0; border-radius:16px; overflow:visible}
 
-    /* アクション面（初期は不可視/非活性。ドラッグ距離で不透明度UP→スナップで完全表示） */
+    /* アクション背景 */
     .actions{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
-      padding:0 8px; opacity:0; pointer-events:none; transition:opacity .12s linear;
-      z-index:0;
+      padding:0 8px; opacity:0; pointer-events:none; transition:opacity .12s linear; z-index:0;
     }
     .left-actions{display:flex; gap:6px; padding-left:8px}
     .right-actions{display:flex; gap:6px; padding-right:8px}
     .btn{
       pointer-events:auto; padding:8px 10px; border-radius:10px; border:1px solid var(--line);
-      background:#fff; font-size:12px; user-select:none; white-space:nowrap;
-      min-width:68px;
+      background:#fff; font-size:12px; user-select:none; white-space:nowrap; min-width:68px;
     }
     .btn.ok{ border-color:#c7ecd1; color:var(--ok); background:var(--actL) }
     .btn.warn{ border-color:#fde68a; color:var(--warn); background:#fffbeb }
     .btn.danger{ border-color:#fecaca; color:var(--danger); background:var(--actR) }
 
-    /* 実カード（track） */
+    /* 実カード */
     .track{
-      position:relative; z-index:1;
-      background:var(--card); border:1px solid var(--line); border-radius:16px;
-      box-shadow:0 1px 0 rgba(0,0,0,.03);
-      padding:12px 14px; transform:translateX(0); transition:transform .18s ease;
-      touch-action:pan-y;
+      position:relative; z-index:1; background:var(--card); border:1px solid var(--line); border-radius:16px;
+      box-shadow:0 1px 0 rgba(0,0,0,.03); padding:12px 14px;
+      transform:translateX(0); transition:transform .18s ease; touch-action:pan-y;
     }
     .ghost{opacity:.45}
     .row{display:flex; align-items:center; gap:8px}
@@ -78,8 +71,7 @@
     .detail .close-x{
       position:absolute; top:-6px; right:-6px; width:26px; height:26px; border-radius:50%;
       border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center;
-      font-weight:700; cursor:pointer;
-      box-shadow:0 1px 2px rgba(0,0,0,.06);
+      font-weight:700; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.06);
     }
 
     .toast{position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111; color:#fff;
@@ -188,11 +180,15 @@
     const pin = t.pinned ? '<span class="pin">📌</span>' : "";
     const ghost = t.status==="completed" ? " ghost" : "";
 
+    // 左側：未完了→「完了」、完了→「取消」
+    const leftPrimaryLabel = (t.status==="completed") ? "取消" : "完了";
+    const leftPrimaryAct   = (t.status==="completed") ? "uncomplete" : "complete";
+
     return `
-    <div class="card-wrap" data-id="${t.id}">
+    <div class="card-wrap" data-id="${t.id}" data-status="${t.status||'active'}">
       <div class="actions">
         <div class="left-actions">
-          <button class="btn ok" data-act="complete">完了</button>
+          <button class="btn ok" data-act="${leftPrimaryAct}">${leftPrimaryLabel}</button>
           <button class="btn" data-act="pin">${t.pinned?"ピン解除":"ピン"}</button>
         </div>
         <div class="right-actions">
@@ -241,17 +237,10 @@
   }
   function toLocalDatetimeValue(iso){
     if(!iso) return "";
-    const d = new Date(iso);
-    const pad = n=>String(n).padStart(2,"0");
-    const yyyy = d.getFullYear(), mm=pad(d.getMonth()+1), dd=pad(d.getDate()),
-          hh = pad(d.getHours()), mi=pad(d.getMinutes());
-    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    const d = new Date(iso), pad=n=>String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
-  function fromLocalDatetimeValue(val){
-    if(!val) return null;
-    const d = new Date(val);
-    return d.toISOString();
-  }
+  function fromLocalDatetimeValue(val){ return val ? new Date(val).toISOString() : null; }
 
   function render(){
     const { pinned, active, completed } = splitByStatus(gAllTasks);
@@ -263,9 +252,9 @@
     $completed.hidden = comps.length===0;
     $empty.hidden = pins.length + acts.length > 0;
 
-    $pinnedList.innerHTML = pins.map(cardHTML).join("");
-    $activeList.innerHTML = acts.map(cardHTML).join("");
-    $completedList.innerHTML = comps.map(cardHTML).join("");
+    $pinnedList.innerHTML   = pins.map(cardHTML).join("");
+    $activeList.innerHTML   = acts.map(cardHTML).join("");
+    $completedList.innerHTML= comps.map(cardHTML).join("");
 
     [...document.querySelectorAll(".card-wrap")].forEach(bindSwipeAndButtons);
     [...document.querySelectorAll(".track")].forEach(bindDetailButtons);
@@ -273,20 +262,20 @@
     document.querySelector(".title").textContent = `LIST｜タスク（${pins.length+acts.length}）`;
   }
 
-  /** ===== スワイプ実装（ボタン幅“実測”でスナップ距離決定） ===== */
-  const TAP_MAX_MOVE = 6;     // タップ判定の許容移動
-  const AXIS_LOCK_SLOP = 6;   // 軸判定の遊び
-  const EXTRA_PAD = 14;       // ボタン群の左右余白
-  const FULL_MARGIN = 36;     // スナップよりさらに進んだらフリックなしでも即実行
-  const V_FULL = 0.58;        // px/ms 以上で即実行（前回より気持ち強め）
+  /** ===== スワイプ（ボタン幅実測でスナップ） ===== */
+  const TAP_MAX_MOVE = 6;
+  const AXIS_LOCK_SLOP = 6;
+  const EXTRA_PAD = 14;
+  const FULL_MARGIN = 36;
+  const V_FULL = 0.58; // px/ms
 
   function bindSwipeAndButtons(wrap){
     const track = wrap.querySelector(".track");
     const actions = wrap.querySelector(".actions");
     const leftBtns = wrap.querySelector(".left-actions");
     const rightBtns= wrap.querySelector(".right-actions");
+    const status = (wrap.dataset.status||"active"); // active/completed/...
 
-    // ★ ここで幅を実測 → カード毎に最適スナップ距離
     const { snapL, snapR, fullL, fullR } = measureSnaps(leftBtns, rightBtns);
 
     let sx=0, sy=0, dx=0, dy=0, ts=0;
@@ -305,10 +294,8 @@
       dragging=true; moved=false; locked=null;
       sx=x; sy=y; dx=0; dy=0; ts=performance.now();
       track.style.transition="none";
-      // 初動で薄っすら見えるように0→少し
       actions.style.opacity = 0;
     };
-
     const onMove = (x,y,evt)=>{
       if(!dragging) return;
       dx = x - sx; dy = y - sy;
@@ -321,20 +308,14 @@
       if(locked==='y'){ return; }
       if(locked==='x' && evt && typeof evt.preventDefault==='function') evt.preventDefault();
 
-      // 表示位置 & アクションの見え方
       const shown = clamp(dx, -fullR-20, fullL-20);
       track.style.transform = `translateX(${shown}px)`;
+      actions.style.opacity = Math.min(1, Math.max(Math.abs(shown)/Math.min(snapL, snapR), 0));
 
-      // 距離に応じて不透明度を上げる（ドラッグ中にボタンが見える）
-      const opa = Math.min(1, Math.max(Math.abs(shown)/Math.min(snapL, snapR), 0));
-      actions.style.opacity = opa;
-
-      // クラスでどちら側が開きかの状態も乗せておく（見た目用）
       if(shown>0){ wrap.classList.add("open-left"); wrap.classList.remove("open-right"); }
       else if(shown<0){ wrap.classList.add("open-right"); wrap.classList.remove("open-left"); }
       else { wrap.classList.remove("open-left","open-right"); }
     };
-
     const onEnd = ()=>{
       if(!dragging) return;
       dragging=false;
@@ -343,14 +324,12 @@
       const wasDrag = moved && Math.abs(dx) > TAP_MAX_MOVE;
       if(wasDrag){ justDragged = true; setTimeout(()=>{ justDragged=false; }, 260); }
 
-      // クリック扱い
       if(!wasDrag){
-        // スナップを開いている時はまず閉じる
+        // トグル（開いていれば閉じる／閉じていれば詳細トグル）
         if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
-          settleTo(wrap,0, actions);
-          return;
+          settleTo(wrap,0, actions); return;
         }
-        openDetail(wrap.dataset.id, true);
+        toggleDetail(wrap.dataset.id);
         return;
       }
 
@@ -360,7 +339,8 @@
       // 即時実行（速度 or 距離）
       if(dx >= fullL || v>=V_FULL){
         settleTo(wrap, 0, actions);
-        onAction(wrap,"complete");
+        // ★完了/取消をステータスで切替
+        onAction(wrap, status==="completed" ? "uncomplete" : "complete");
         return;
       }
       if(dx <= -fullR || v<=-V_FULL){
@@ -369,7 +349,7 @@
         return;
       }
 
-      // スナップ固定（ボタン完全露出 ＋ クリック可）
+      // スナップ固定（ボタン露出）
       if(dx > snapL){
         settleTo(wrap, snapL, actions, 1);
         closeOtherOpenSides(wrap.dataset.id);
@@ -385,18 +365,19 @@
         return;
       }
 
-      // 小さい動き→戻す
       settleTo(wrap, 0, actions);
     };
 
-    // ボタン押下
+    // 左ボタン（完了/取消・ピン）
     leftBtns.addEventListener("click", (e)=>{
       const b = e.target.closest(".btn"); if(!b) return;
       const act = b.dataset.act;
-      if(act==="complete"){ onAction(wrap,"complete"); }
-      else if(act==="pin"){ onAction(wrap,"pin"); }
+      if(act==="complete" || act==="uncomplete" || act==="pin"){
+        onAction(wrap, act);
+      }
       settleTo(wrap,0, actions);
     });
+    // 右ボタン（詳細・削除）
     rightBtns.addEventListener("click", (e)=>{
       const b = e.target.closest(".btn"); if(!b) return;
       const act = b.dataset.act;
@@ -405,22 +386,21 @@
       settleTo(wrap,0, actions);
     });
 
-    // === touch/mouse ===
+    // touch/mouse
     track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX, e.touches[0].clientY), {passive:false});
     track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX, e.touches[0].clientY, e), {passive:false});
     track.addEventListener("touchend", onEnd, {passive:false});
-
     track.addEventListener("mousedown", e=>onStart(e.clientX, e.clientY));
     track.addEventListener("mousemove", e=>{ if(e.buttons===1) onMove(e.clientX, e.clientY, e) });
     track.addEventListener("mouseup", onEnd);
 
-    // ドラッグ直後の合成クリックを抑止
+    // ドラッグ直後の合成クリック抑止＆トグル
     track.addEventListener("click",(e)=>{
       if(justDragged){ e.stopPropagation(); e.preventDefault(); return; }
       if(wrap.classList.contains("open-left") || wrap.classList.contains("open-right")){
         settleTo(wrap,0, actions); return;
       }
-      openDetail(wrap.dataset.id, true);
+      toggleDetail(wrap.dataset.id);
     });
   }
 
@@ -433,18 +413,14 @@
   }
 
   function measureSnaps(leftBtns, rightBtns){
-    // 画面に描画済みなので実測できる
     const l = leftBtns.getBoundingClientRect().width;
     const r = rightBtns.getBoundingClientRect().width;
-    // ボタン群+余白分だけ確実に露出（最小110, 最大240の範囲で丸め）
     const snapL = clamp(Math.round(l + EXTRA_PAD), 110, 240);
     const snapR = clamp(Math.round(r + EXTRA_PAD), 110, 240);
-    // “さらに進んだら” 即実行（前より少し余裕）
     const fullL = snapL + FULL_MARGIN;
     const fullR = snapR + FULL_MARGIN;
     return { snapL, snapR, fullL, fullR };
   }
-
   function settleTo(wrap, x, actions, forceOpacity){
     const track = wrap.querySelector(".track");
     track.style.transform = `translateX(${x}px)`;
@@ -465,30 +441,7 @@
     onAction(wrap,"delete");
   }
 
-  async function onAction(wrap, action){
-    const id = wrap.dataset.id;
-    try{
-      if(action==="detail"){ openDetail(id,true); return; }
-      if(action==="uncomplete"){
-        await postAction("complete-undo",{task_id:id,user_id:gUserId});
-        toast("完了を取り消しました");
-      }else if(action==="complete"){
-        await postAction("complete",{task_id:id,user_id:gUserId});
-        toast("完了しました");
-      }else if(action==="pin"){
-        await postAction("toggle-pin",{task_id:id,user_id:gUserId});
-        toast("ピンの切替");
-      }else if(action==="delete"){
-        await postAction("delete",{task_id:id,user_id:gUserId});
-        toast("削除しました");
-      }
-      await loadTasks(gUserId);
-    }catch(e){
-      console.error(e);
-      toast("エラー: "+(e.message||"failed"));
-    }
-  }
-
+  /** ===== 詳細開閉 ===== */
   function closeOtherDetails(keepId){
     if(gOpenDetailId && gOpenDetailId!==keepId){
       const prev = el(`#detail-${gOpenDetailId}`);
@@ -501,7 +454,13 @@
     if(open){ det.classList.add("open"); gOpenDetailId = id; }
     else { det.classList.remove("open"); if(gOpenDetailId===id) gOpenDetailId=null; }
   }
+  function toggleDetail(id){
+    const det = el(`#detail-${id}`); if(!det) return;
+    const willOpen = !det.classList.contains("open");
+    openDetail(id, willOpen);
+  }
 
+  /** ===== 詳細保存 ===== */
   async function saveDetail(id){
     const det = el(`#detail-${id}`); if(!det) return;
     const fields = {};
@@ -528,6 +487,7 @@
 
   /** ===== API ===== */
   async function postAction(action, body){
+    // ★ n8n 側の Switch は 'pin' を見る前提。トグルはサーバ側で処理。
     const res = await fetch(ACTION_API_URL, {
       method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ action, ...body })
@@ -537,6 +497,31 @@
     return j;
   }
 
+  async function onAction(wrap, action){
+    const id = wrap.dataset.id;
+    try{
+      if(action==="detail"){ openDetail(id,true); return; }
+      if(action==="uncomplete"){
+        await postAction("uncomplete",{task_id:id,user_id:gUserId}); // ← n8nで「完了取消し」用に分岐
+        toast("完了を取り消しました");
+      }else if(action==="complete"){
+        await postAction("complete",{task_id:id,user_id:gUserId});
+        toast("完了しました");
+      }else if(action==="pin"){
+        await postAction("pin",{task_id:id,user_id:gUserId}); // ← 'toggle-pin' ではなく 'pin'
+        toast("ピンの切替");
+      }else if(action==="delete"){
+        await postAction("delete",{task_id:id,user_id:gUserId});
+        toast("削除しました");
+      }
+      await loadTasks(gUserId);
+    }catch(e){
+      console.error(e);
+      toast("エラー: "+(e.message||"failed"));
+    }
+  }
+
+  /** ===== 読み込み ===== */
   async function loadTasks(userId){
     if(!userId){
       const prof = await liff.getProfile();
