@@ -27,18 +27,13 @@
       border-radius:16px; margin:10px 0; box-shadow:0 1px 0 rgba(0,0,0,.03);
       overflow:hidden;
     }
-
-    /* Top row (click to expand) */
-    .row{
-      display:flex; align-items:center; gap:8px; padding:12px 14px;
-    }
+    .row{ display:flex; align-items:center; gap:8px; padding:12px 14px; }
     .titleTxt{ flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
     .pin{ font-size:12px; color:var(--accent) }
     .meta{ display:flex; gap:8px; color:var(--sub); font-size:12px }
     .pillDue{ padding:2px 8px; border-radius:999px; border:1px solid var(--line) }
     .ghost{ opacity:.45 }
 
-    /* Swipe track */
     .swipe-wrap{ position:relative; overflow:hidden }
     .track{ position:relative; touch-action:pan-y; background:var(--card) }
     .actions{
@@ -51,18 +46,20 @@
     .btn.warn{ color:var(--warn); background:#fffbeb; border-color:#fde68a }
     .btn.danger{ color:var(--danger); background:#fef2f2; border-color:#fecaca }
 
-    /* Detail panel */
     .panel{
-      padding:12px 14px; border-top:1px dashed var(--line); background:#fff; display:none;
+      padding:12px 14px; border-top:1px dashed var(--line); background:#fff; display:none; position:relative;
     }
     .panel.open{ display:block }
+    .panel .close{
+      position:absolute; right:10px; top:8px; width:28px; height:28px; border-radius:50%;
+      border:1px solid var(--line); background:#fff; font-weight:700; cursor:pointer;
+    }
     .grid{ display:grid; grid-template-columns:120px 1fr; gap:10px; align-items:center; margin:8px 0 }
     .grid label{ color:var(--sub); font-size:13px }
-    input[type="text"],textarea,input[type="datetime-local"],input[type="number"]{
+    input[type="text"],textarea,input[type="datetime-local"],select{
       width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; font:inherit;
     }
     textarea{ min-height:84px; resize:vertical }
-    .switch{ display:flex; align-items:center; gap:8px }
     .panelBtns{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px }
     .b{ padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:#fff; cursor:pointer }
     .b.primary{ background:#111; color:#fff; border-color:#111 }
@@ -71,16 +68,11 @@
     .b.danger{ color:var(--danger); background:#fef2f2; border-color:#fecaca }
 
     .empty{ color:var(--sub); text-align:center; padding:36px 12px }
-
     .toast{ position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
       background:#111; color:#fff; padding:10px 14px; border-radius:999px; font-size:13px; opacity:0; transition:.25s }
     .toast.show{ opacity:1 }
 
-    /* snap hint (optional) */
-    .snapHint{
-      position:absolute; top:50%; transform:translateY(-50%);
-      width:120px; text-align:center; font-size:11px; color:#888; opacity:.0; transition:.2s;
-    }
+    .snapHint{ position:absolute; top:50%; transform:translateY(-50%); width:120px; text-align:center; font-size:11px; color:#888; opacity:0; transition:.2s }
     .snapHint.left{ left:8px } .snapHint.right{ right:8px }
     .showHint .snapHint{ opacity:.9 }
   </style>
@@ -106,23 +98,23 @@
     </div>
 
     <div id="empty" class="empty" hidden>まだタスクがありません。LINEでメッセージを送ると追加されます。</div>
-
     <pre id="debug" style="white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #eee;padding:8px;border-radius:8px"></pre>
   </main>
 
   <div id="toast" class="toast"></div>
 
 <script>
-/** ====== 設定 ====== */
+/** ====== 設定（差し替え） ====== */
 const LIFF_ID        = "2008311584-NdJqOqMn";
 const LIST_API_URL   = "https://lumicreate.xvps.jp/webhook/webhook-list";
 const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action";
-/** ================== */
+/** ================================= */
 
 let gUserId = null;
 let gAllTasks = [];
 
 const el = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
 const $activeList = el('#active-list');
 const $completedList = el('#completed-list');
 const $completed = el('#completed');
@@ -131,10 +123,31 @@ const $empty = el('#empty');
 function toast(m){ const t=el('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1400); }
 function dbg(...a){ const d=el('#debug'); d.textContent+=a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' ')+'\n'; d.scrollTop=d.scrollHeight; }
 
-const fmtJST = iso => iso? new Date(iso).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
-function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])) }
-function toLocalInputValue(iso){ if(!iso) return ''; const d=new Date(iso); const z=new Date(d.getTime()-d.getTimezoneOffset()*60000); return z.toISOString().slice(0,16); }
+const JST = 'Asia/Tokyo';
+const fmtJST = iso => iso? new Date(iso).toLocaleString('ja-JP',{timeZone:JST,month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+function escapeHTML(s){ return String(s||'').replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]) )}
+function toLocalInputValue(iso){ if(!iso) return ''; const d=new Date(iso); const z = new Date(d.getTime()-d.getTimezoneOffset()*60000); return z.toISOString().slice(0,16); }
 function toUTCFromLocalInput(val){ if(!val) return null; const d=new Date(val); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString(); }
+
+/** 作成日の24:00(JST) を返す。既定は 23:59 に丸める */
+function defaultDueFromCreatedAt(created_at){
+  const d = created_at? new Date(created_at) : new Date();
+  // JSTの日付で 23:59 を作る
+  const y = new Intl.DateTimeFormat('ja-JP',{timeZone:JST,year:'numeric'}).format(d);
+  const m = new Intl.DateTimeFormat('ja-JP',{timeZone:JST,month:'2-digit'}).format(d);
+  const day = new Intl.DateTimeFormat('ja-JP',{timeZone:JST,day:'2-digit'}).format(d);
+  // ローカル入力値（datetime-local）に合わせるための yyyy-mm-ddTHH:MM
+  const localStr = `${y}-${m}-${day}T23:59`;
+  return localStr;
+}
+/** due(ローカル) の2時間前（ローカル入力値） */
+function defaultRemindLocal(dueLocalStr){
+  if(!dueLocalStr) return '';
+  const d = new Date(dueLocalStr);
+  const twoH = new Date(d.getTime() - 2*3600*1000);
+  const z = new Date(twoH.getTime() - twoH.getTimezoneOffset()*60000);
+  return z.toISOString().slice(0,16);
+}
 
 function sortTasks(arr){
   return arr.slice().sort((a,b)=>{
@@ -179,11 +192,20 @@ async function loadTasks(){
   render();
 }
 
+/** ==== 描画 ==== */
 function cardHTML(t){
   const dueTxt = fmtJST(t.due_at);
   const pin = t.pinned ? '<span class="pin">📌</span>' : '';
   const ghost = t.status === 'completed' ? ' ghost' : '';
   const id = t.id;
+
+  // 入力初期値：優先度(1〜3), コメント, 期限(作成日24:00 JST), リマインド(期限-2h)
+  const initPriority = (t.priority ?? 1);
+  const priorityClamped = Math.min(3, Math.max(1, initPriority));
+  const localDueForInput = toLocalInputValue(t.due_at) || defaultDueFromCreatedAt(t.created_at);
+  const localRemForInput =
+    (t.remind_times?.[0] ? toLocalInputValue(t.remind_times[0]) : defaultRemindLocal(localDueForInput));
+
   return `
   <div class="card${ghost}" data-id="${id}">
     <div class="swipe-wrap">
@@ -209,14 +231,19 @@ function cardHTML(t){
     </div>
 
     <div class="panel" id="p-${id}">
-      <div class="grid"><label>タイトル</label><input type="text" data-f="title" value="${escapeHTML(t.title||'')}" /></div>
-      <div class="grid"><label>詳細</label><textarea data-f="detail">${escapeHTML(t.detail||'')}</textarea></div>
-      <div class="grid"><label>期限</label><input type="datetime-local" data-f="due_at" value="${toLocalInputValue(t.due_at)}"/></div>
-      <div class="grid"><label>優先度</label><input type="number" min="0" max="10" data-f="priority" value="${t.priority??''}"/></div>
-      <div class="grid"><label>Vision</label><input type="number" min="0" max="10" data-f="vision_score" value="${t.vision_score??''}"/></div>
-      <div class="grid"><label>Excite</label><input type="number" min="0" max="10" data-f="excite_score" value="${t.excite_score??''}"/></div>
-      <div class="grid"><label>Growth</label><input type="number" min="0" max="10" data-f="growth_score" value="${t.growth_score??''}"/></div>
-      <div class="grid"><label>ピン留め</label><div class="switch"><input type="checkbox" data-f="pinned" ${t.pinned?'checked':''}/><span class="meta">一覧上部に表示</span></div></div>
+      <button class="close" title="閉じる" aria-label="閉じる">×</button>
+      <div class="grid"><label>コメント</label><textarea data-f="detail" placeholder="メモ">${escapeHTML(t.detail||'')}</textarea></div>
+      <div class="grid">
+        <label>優先度</label>
+        <select data-f="priority">
+          <option value="1" ${priorityClamped===1?'selected':''}>1</option>
+          <option value="2" ${priorityClamped===2?'selected':''}>2</option>
+          <option value="3" ${priorityClamped===3?'selected':''}>3</option>
+        </select>
+      </div>
+      <div class="grid"><label>期限</label><input type="datetime-local" data-f="due_at" value="${localDueForInput}"/></div>
+      <div class="grid"><label>リマインド</label><input type="datetime-local" data-f="remind_at" value="${localRemForInput}"/></div>
+
       <div class="panelBtns">
         <button class="b primary" data-save>保存</button>
         <button class="b ok" data-complete ${t.status==='completed'?'disabled':''}>完了</button>
@@ -239,18 +266,27 @@ function render(){
   $completed.hidden = compSorted.length === 0;
   $empty.hidden     = actSorted.length > 0;
 
-  // クリックでパネル開閉
-  document.querySelectorAll('.card .titleRow').forEach(row=>{
+  // タイトル行クリック：1つだけ開く
+  $$('.card .titleRow').forEach(row=>{
     row.addEventListener('click', ()=>{
       const card = row.closest('.card');
       const id   = card.dataset.id;
-      const pan  = el(`#p-${CSS.escape(id)}`);
-      pan.classList.toggle('open');
+      // すべて閉じる → 対象だけ開く
+      $$('.panel.open').forEach(p=>p.classList.remove('open'));
+      el(`#p-${CSS.escape(id)}`)?.classList.add('open');
     });
   });
 
-  // ボタンクリック（詳細ボタン群）
-  document.querySelectorAll('.panel').forEach(p=>{
+  // ✕で閉じる
+  $$('.panel .close').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      btn.closest('.panel')?.classList.remove('open');
+    });
+  });
+
+  // パネル内ボタン
+  $$('.panel').forEach(p=>{
     const card = p.closest('.card'); const id = card.dataset.id;
     p.querySelector('[data-save]')?.addEventListener('click', ()=>saveCard(id,p));
     p.querySelector('[data-complete]')?.addEventListener('click', ()=>completeCard(id));
@@ -259,15 +295,15 @@ function render(){
     p.querySelector('[data-delete]')?.addEventListener('click', ()=>deleteCard(id));
   });
 
-  // スワイプ（ボタン・スナップ有り）
-  document.querySelectorAll('.swipe-wrap .track').forEach(bindSwipe);
+  // スワイプ
+  $$('.swipe-wrap .track').forEach(bindSwipe);
 }
 
-/* ===== スワイプ：スナップ → ボタン操作 or 強いスワイプで即実行 ===== */
-const SW_SNAP_L = 90;   // 左スナップ距離（ここで停止＝ボタン操作可）
-const SW_SNAP_R = -90;  // 右スナップ距離
-const SW_STRONG_V = 0.8; // 強いスワイプの最低速度(px/ms)
-const SW_STRONG_X = 140; // 強いスワイプの最低距離(px)
+/** ==== スワイプ（スナップ＋強スワイプ） ==== */
+const SW_SNAP_L = 90;
+const SW_SNAP_R = -90;
+const SW_STRONG_V = 0.8;
+const SW_STRONG_X = 140;
 
 function bindSwipe(track){
   const wrap = track.closest('.swipe-wrap');
@@ -286,18 +322,17 @@ function bindSwipe(track){
     if(!active) return;
     const now=performance.now();
     dx = x - sx;
-    velocity = (x - lastX) / Math.max(1, (now - lastT)); // px/ms
+    velocity = (x - lastX) / Math.max(1, (now - lastT));
     lastX=x; lastT=now;
     setX(dx);
   };
   const onEnd = async ()=>{
     card.classList.remove('showHint');
     track.style.transition='transform .18s ease';
-
     const absX = Math.abs(dx);
     const fast = (Math.abs(velocity) >= SW_STRONG_V) && (absX >= SW_STRONG_X);
 
-    // 強いスワイプ：右=完了 / 左=削除（確認あり）
+    // 強いスワイプで即実行
     if (fast){
       const id = card.dataset.id;
       if (dx > 0){
@@ -309,48 +344,44 @@ function bindSwipe(track){
       return;
     }
 
-    // スナップ（ボタン操作タイム）
+    // スナップ：ボタン操作
     if (dx > 0 && dx >= SW_SNAP_L){ setX(SW_SNAP_L); }
     else if (dx < 0 && dx <= SW_SNAP_R){ setX(SW_SNAP_R); }
     else { setX(0); dx=0; return; }
 
-    // ボタンを活性化
-    // ここで各ボタンにクリックをバインド（1回だけ）
-    const btns = wrap.querySelectorAll('.btn');
-    btns.forEach(b=>{
+    // ボタンにハンドラ（何度でも押せる）
+    wrap.querySelectorAll('.btn').forEach(b=>{
       if (b.dataset.binded) return;
       b.dataset.binded = '1';
       b.addEventListener('click', async (e)=>{
         const id = card.dataset.id;
         const act = e.currentTarget.dataset.act;
         try{
-          if (act === 'detail'){
-            // タイトル行を擬似クリック＝下のパネル開く
-            card.querySelector('.titleRow').click();
+          if (act === 'detail'){ // タップでパネル開閉（1つだけ開く）
+            $$('.panel.open').forEach(p=>p.classList.remove('open'));
+            el(`#p-${CSS.escape(id)}`)?.classList.add('open');
             return;
           }
           if (act === 'delete'){
             if (!confirm('このタスクを削除しますか？')) return;
           }
           if (act === 'pin'){
-            // 現状トグル：パネルのチェックも合わせる
             const pan = el(`#p-${CSS.escape(id)}`);
-            const ck = pan?.querySelector('[data-f="pinned"]');
-            const newPin = !(ck?.checked);
+            // パネル無くてもトグルOK
+            const newPin = !gAllTasks.find(x=>x.id===id)?.pinned;
             await runAction('pin', { task_id:id, pinned:newPin });
             toast(newPin?'ピン留めしました':'ピン解除しました');
             await loadTasks();
             return;
           }
-          // complete / remind は既存の action を踏襲
           await runAction(act, { task_id:id });
           toast(act==='complete'?'完了しました':'実行しました');
           await loadTasks();
         }catch(err){ console.error(err); toast('失敗しました'); }
-      }, { once:false });
+      });
     });
 
-    // 少し待って自動で戻す（タップできる時間を与える）
+    // 2秒後に自動で戻す
     setTimeout(()=>{ track.style.transition='transform .18s ease'; setX(0); dx=0; }, 2000);
   };
 
@@ -366,35 +397,42 @@ function bindSwipe(track){
   track.addEventListener('mouseup',    endEv);
 }
 
-/* ===== パネル操作 ===== */
+/** ==== 保存系 ==== */
 function collectPanelFields(pan){
   const get = sel => pan.querySelector(sel);
-  const getVal = (sel)=>{ const n=get(sel); return n? n.value : '' };
-  const valOrNullNum = v => v===''? null : Number(v);
-  const payload = {
-    title: (getVal('[data-f="title"]')||'').trim(),
-    detail:(getVal('[data-f="detail"]')||'').trim(),
-    due_at: toUTCFromLocalInput(getVal('[data-f="due_at"]')),
-    priority: valOrNullNum(getVal('[data-f="priority"]')),
-    vision_score: valOrNullNum(getVal('[data-f="vision_score"]')),
-    excite_score: valOrNullNum(getVal('[data-f="excite_score"]')),
-    growth_score: valOrNullNum(getVal('[data-f="growth_score"]')),
-    pinned: !!(pan.querySelector('[data-f="pinned"]')?.checked),
+  const comment = (get('[data-f="detail"]')?.value || '').trim(); // コメント
+  const priority = Number(get('[data-f="priority"]')?.value || 1);
+  const dueLocal = get('[data-f="due_at"]')?.value || '';          // ローカル
+  const remLocal = get('[data-f="remind_at"]')?.value || '';       // ローカル
+
+  const fields = {
+    detail: comment,
+    priority: Math.min(3, Math.max(1, priority)),
+    due_at: dueLocal ? toUTCFromLocalInput(dueLocal) : null,
+    remind_times: remLocal ? [ toUTCFromLocalInput(remLocal) ] : [],
   };
-  return payload;
+  return fields;
 }
 
 async function saveCard(id, pan){
   try{
     const fields = collectPanelFields(pan);
+    // due_at が空なら既存維持（または作成日24:00を採用）
     if (!fields.due_at){
       const t = gAllTasks.find(x=>x.id===id);
-      if (t?.due_at) fields.due_at = t.due_at; // 未入力なら既存維持
+      if (t?.due_at) fields.due_at = t.due_at;
+      else fields.due_at = toUTCFromLocalInput(defaultDueFromCreatedAt(t?.created_at));
+    }
+    // リマインドが空ならデフォルト（期限-2h）
+    if (!fields.remind_times?.length){
+      const localDue = toLocalInputValue(fields.due_at);
+      const remLocal = defaultRemindLocal(localDue);
+      if (remLocal) fields.remind_times = [ toUTCFromLocalInput(remLocal) ];
     }
     await runAction('update', { task_id:id, fields });
     toast('保存しました');
     await loadTasks();
-    // 再度パネル開く（位置維持）
+    // 直前のカードだけ開いたままにする
     el(`#p-${CSS.escape(id)}`)?.classList.add('open');
   }catch(e){ console.error(e); toast('保存失敗'); }
 }
@@ -406,10 +444,10 @@ async function uncompleteCard(id){
   try{ await runAction('uncomplete',{task_id:id}); toast('取消しました'); await loadTasks(); }
   catch{ toast('失敗'); }
 }
-async function togglePin(id, pan){
+async function togglePin(id){
   try{
-    const ck = pan.querySelector('[data-f="pinned"]');
-    const newPin = !ck.checked;
+    const cur = gAllTasks.find(x=>x.id===id)?.pinned;
+    const newPin = !cur;
     await runAction('pin',{ task_id:id, pinned:newPin });
     toast(newPin?'ピン留めしました':'ピン解除しました');
     await loadTasks();
@@ -422,7 +460,7 @@ async function deleteCard(id){
   catch{ toast('失敗'); }
 }
 
-/* ===== 起動 ===== */
+/** ==== 起動 ==== */
 async function bootstrap(){
   await liff.init({ liffId: LIFF_ID });
   if(!liff.isLoggedIn()) liff.login();
