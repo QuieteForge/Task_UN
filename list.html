@@ -241,14 +241,31 @@ async function loadTasks(userId){
 
 function actionLabel(a){ return ({pin:"ピン",complete:"完了",uncomplete:"取消",delete:"削除",remind:"ﾘﾏｲﾝﾄﾞ"}[a]||a); }
 
-async function runAction(id, action){
-  const body = JSON.stringify({ action, task_id:id, user_id:gUserId });
-  const res = await fetch(ACTION_API_URL,{ method:"POST", headers:{ "Content-Type":"application/json" }, body });
-  const j = await res.json().catch(()=>({ok:false}));
-  if(!res.ok || j.ok===false) throw new Error(j.message||"action failed");
-  toast(actionLabel(action)+"しました");
-  await loadTasks(gUserId);
+async function runAction(id, act){
+  const body={action:act,task_id:id,user_id:gUserId};
+  const res=await fetch(ACTION_API_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  });
+  const j=await res.json().catch(()=>({ok:false}));
+  if(!res.ok||!j.ok){toast("失敗しました");return;}
+
+  // ローカル即時反映
+  const t=gAll.find(t=>t.id===id);
+  if(t){
+    if(act==="delete") gAll=gAll.filter(x=>x.id!==id);
+    if(act==="complete") t.status="completed";
+    if(act==="uncomplete") t.status="active";
+    if(act==="pin") t.pinned=!t.pinned;
+  }
+  render();
+
+  toast("更新しました");
+  // Supabase同期
+  setTimeout(()=>load(),1000);
 }
+
 
 /** ====== 起動 ====== */
 (async function bootstrap(){
@@ -280,3 +297,4 @@ async function runAction(id, action){
 </script>
 </body>
 </html>
+
