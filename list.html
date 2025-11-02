@@ -1,77 +1,72 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LIST｜タスク</title>
-<link rel="preconnect" href="https://static.line-scdn.net">
-<style>
-  :root{
-    --bg:#f7f7f8;--card:#fff;--ink:#111;--sub:#666;--line:#e9e9ec;
-    --pill:#eef2ff;--accent:#3957ff;--ok:#16a34a;--warn:#eab308;--danger:#ef4444;
-  }
-  *{box-sizing:border-box} html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:10}
-  .bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px}
-  .title{font-weight:650}
-  .pill{padding:6px 10px;border-radius:999px;background:var(--pill);font-size:12px}
-  main{padding:14px;max-width:720px;margin:0 auto}
-  h3{margin:10px 6px;color:var(--sub);font-size:13px}
-  .card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;margin:10px 0;box-shadow:0 1px 0 rgba(0,0,0,.03)}
-  .row{display:flex;align-items:center;gap:8px;padding:12px 14px}
-  .titleTxt{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .meta{display:flex;gap:8px;color:var(--sub);font-size:12px}
-  .chip{padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
-  .pin{color:var(--accent)}
-  .ghost{opacity:.45}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LIST｜タスク</title>
+  <style>
+    :root {
+      --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
+      --pill:#eef2ff; --accent:#3957ff; --ok:#16a34a; --warn:#eab308; --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    header{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);z-index:10}
+    .bar{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px}
+    .title{font-weight:650;letter-spacing:.2px}
+    .pill{padding:6px 10px;border-radius:999px;background:var(--pill);font-size:12px}
+    main{padding:14px;max-width:720px;margin:0 auto}
+    h3{margin:8px 6px 10px;font-size:13px;color:var(--sub);font-weight:600}
+    .section{margin:18px 0}
+    .empty{color:var(--sub);text-align:center;padding:36px 12px}
+    .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.25s}
+    .toast.show{opacity:1}
 
-  /* swipe */
-  .swipe-wrap{position:relative;overflow:hidden;border-radius:16px}
-  .actions{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 8px;opacity:0;pointer-events:none;transition:opacity .15s}
-  .btn{pointer-events:auto;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:12px}
-  .btn.ok{border-color:#c7ecd1;color:var(--ok);background:#ecfdf5}
-  .btn.warn{border-color:#fde68a;color:var(--warn);background:#fffbeb}
-  .btn.danger{border-color:#fecaca;color:var(--danger);background:#fef2f2}
-  .track{position:relative;touch-action:pan-y;background:#fff;z-index:1;transition:transform .18s ease}
-  .swipe-wrap.menu .actions{opacity:1;pointer-events:auto}
-  .swipe-wrap.menu .track{transform:translateX(-96px)}
+    /* card & swipe */
+    .card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;margin:10px 0;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+    .swipe-wrap{position:relative;overflow:hidden;border-radius:16px}
+    .track{position:relative;touch-action:pan-y;padding:12px 14px;background:var(--card)}
+    .row{display:flex;align-items:center;gap:8px}
+    .titleTxt{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .meta{display:flex;gap:8px;color:var(--sub);font-size:12px}
+    .pillDue{padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+    .pin{font-size:12px;color:var(--accent)}
+    .ghost{opacity:.45}
 
-  .empty{color:var(--sub);text-align:center;padding:36px 12px}
-  #debug{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #eee;padding:8px;margin:8px;border-radius:8px}
-  .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;padding:10px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.25s}
-  .toast.show{opacity:1}
-</style>
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    .actions{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 8px;pointer-events:none;opacity:0;transition:.18s}
+    .btn{pointer-events:auto;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:12px}
+    .btn.ok{border-color:#c7ecd1;color:var(--ok);background:#ecfdf5}
+    .btn.warn{border-color:#fde68a;color:var(--warn);background:#fffbeb}
+    .btn.danger{border-color:#fecaca;color:var(--danger);background:#fef2f2}
+
+    /* debug toggle (任意) */
+    #debug{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #eee;padding:8px;margin:8px;border-radius:8px;display:none}
+  </style>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
 <header>
   <div class="bar">
     <div class="title">LIST｜タスク</div>
-    <div id="user-pill" class="pill">loading…</div>
+    <div class="pill" id="user-pill">loading…</div>
   </div>
 </header>
 
 <main>
-  <div style="display:flex;gap:8px;padding:8px">
-    <input id="q" placeholder="検索（タイトル/詳細）" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff">
-    <button id="reload" style="padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#fff">再読込</button>
-  </div>
-
-  <section id="pinned-sec" hidden>
+  <div class="section" id="pinned-sec" hidden>
     <h3>📌 ピン留め</h3>
     <div id="pinned-list"></div>
-  </section>
+  </div>
 
-  <section>
+  <div class="section">
     <h3>📝 未完了</h3>
     <div id="active-list"></div>
-  </section>
+  </div>
 
-  <section id="completed-sec" hidden>
+  <div class="section" id="completed-sec" hidden>
     <h3>✅ 完了（直近1週間）</h3>
     <div id="completed-list"></div>
-  </section>
+  </div>
 
   <div id="empty" class="empty" hidden>まだタスクがありません。LINEでメッセージを送ると追加されます。</div>
 </main>
@@ -80,63 +75,72 @@
 <div id="toast" class="toast"></div>
 
 <script>
-/** ====== 設定 ====== */
+/** ========= 設定（あなたの値に差し替え） ========= */
 const LIFF_ID       = "2008311584-NdJqOqMn";
 const LIST_API_URL  = "https://lumicreate.xvps.jp/webhook/webhook-list";
 const ACTION_API_URL= "https://lumicreate.xvps.jp/webhook/webhook-action";
-const DEBUG = true;
+/** ================================================ */
 
-/** ====== ユーティリティ ====== */
-const $ = sel => document.querySelector(sel);
-function dbg(...a){ if(!DEBUG) return; const d=$("#debug"); if(d) d.textContent += a.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ')+"\n"; }
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1400); }
-function esc(s){ return String(s||"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+let gUserId = null;
+let gAll = [];
+
+/* ---------- 小物 ---------- */
+const $ = s => document.querySelector(s);
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1200); }
+function dbg(...a){ const d=$("#debug"); if(!d) return; d.style.display="block"; d.textContent += a.map(x=> typeof x==='string'?x:JSON.stringify(x)).join(' ')+"\n"; }
 function fmtJST(iso){ if(!iso) return ""; const d=new Date(iso); return d.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}); }
+function escapeHTML(s){ return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
-/** ====== 状態 ====== */
-let gUserId=null, gAll=[];
-
-/** ====== 描画 ====== */
+/* ---------- データ整形 ---------- */
 function splitByStatus(all){
   const now=Date.now(), weekAgo=now-7*24*3600*1000;
   const pinned=[], active=[], completed=[];
   for(const t of all){
     if(t.pinned){ pinned.push(t); continue; }
     if(t.status==="completed"){
-      const ct=t.completed_at?new Date(t.completed_at).getTime():0;
-      if(ct>=weekAgo) completed.push(t);
+      const cAt=t.completed_at? new Date(t.completed_at).getTime():0;
+      if(cAt>=weekAgo) completed.push(t);
       continue;
     }
     if(t.status==="deleted"||t.status==="archived") continue;
     active.push(t);
   }
-  const byDue=(a,b)=>{
+  return { pinned, active, completed };
+}
+function sortTasks(arr){
+  return arr.slice().sort((a,b)=>{
     const ad=new Date(a.due_at||0).getTime(), bd=new Date(b.due_at||0).getTime();
-    if(ad!==bd) return ad-bd;
+    if(ad!==bd) return ad-bd; // 期限昇順
     const ap=Number.isFinite(a.priority)?a.priority:-1, bp=Number.isFinite(b.priority)?b.priority:-1;
-    return bp-ap;
-  };
-  return { pinned:pinned.sort(byDue).slice(0,3), active:active.sort(byDue), completed:completed.sort(byDue) };
+    return bp-ap; // 優先度降順
+  });
 }
 
+/* ---------- 描画 ---------- */
 function cardHTML(t){
-  const due=fmtJST(t.due_at), ghost=t.status==="completed"?" ghost":"";
-  const pin=t.pinned?'<span class="pin">📌</span>':'';
-  const leftBtn = t.status==="completed" ? '<button class="btn ok" data-act="uncomplete">取消</button>' : '<button class="btn ok" data-act="complete">完了</button>';
+  const due=fmtJST(t.due_at), pin=t.pinned?'<span class="pin">📌</span>':"", ghost=t.status==="completed"?" ghost":"";
   return `
-  <div class="swipe-wrap card${ghost}" data-id="${t.id}" data-status="${t.status||'active'}">
+  <div class="swipe-wrap card${ghost}" data-id="${t.id}">
     <div class="actions">
-      <div style="display:flex;gap:6px">${leftBtn}<button class="btn warn" data-act="remind">ﾘﾏｲﾝﾄﾞ</button></div>
+      <!-- 左側（完了/取消・リマインド） -->
       <div style="display:flex;gap:6px">
-        <button class="btn" data-act="pin">${t.pinned?"ピン解除":"ピン"}</button>
+        <button class="btn ok" data-act="${t.status==='completed'?'uncomplete':'complete'}">${t.status==='completed'?'取消':'完了'}</button>
+        <button class="btn warn" data-act="remind">ﾘﾏｲﾝﾄﾞ</button>
+      </div>
+      <!-- 右側（ピン・詳細・削除） -->
+      <div style="display:flex;gap:6px">
+        <button class="btn" data-act="pin">${t.pinned?'ピン解除':'ピン'}</button>
         <button class="btn" data-act="detail">詳細</button>
         <button class="btn danger" data-act="delete">削除</button>
       </div>
     </div>
     <div class="track">
       <div class="row">
-        <div class="titleTxt">${pin}${esc(t.title||"(無題)")}</div>
-        <div class="meta"><span class="chip">⏰ ${esc(due)}</span>${Number.isFinite(t.priority)?`<span class="chip">★${t.priority}</span>`:""}</div>
+        <div class="titleTxt">${pin}${escapeHTML(t.title||'(無題)')}</div>
+        <div class="meta">
+          <span class="pillDue">⏰ ${escapeHTML(due)}</span>
+          ${Number.isFinite(t.priority)?`<span class="pillDue">★${t.priority}</span>`:''}
+        </div>
       </div>
     </div>
   </div>`;
@@ -144,157 +148,182 @@ function cardHTML(t){
 
 function render(){
   const {pinned,active,completed}=splitByStatus(gAll);
-  $("#pinned-sec").hidden = pinned.length===0;
-  $("#completed-sec").hidden = completed.length===0;
-  $("#empty").hidden = (pinned.length+active.length)>0;
+  const pinS=sortTasks(pinned), actS=sortTasks(active), compS=sortTasks(completed);
 
-  $("#pinned-list").innerHTML   = pinned.map(cardHTML).join("");
-  $("#active-list").innerHTML   = active.map(cardHTML).join("");
-  $("#completed-list").innerHTML= completed.map(cardHTML).join("");
+  $("#pinned-sec").hidden = pinS.length===0;
+  $("#completed-sec").hidden = compS.length===0;
+  $("#empty").hidden = (pinS.length+actS.length)>0;
 
+  $("#pinned-list").innerHTML   = pinS.map(cardHTML).join("");
+  $("#active-list").innerHTML   = actS.map(cardHTML).join("");
+  $("#completed-list").innerHTML= compS.map(cardHTML).join("");
+
+  // スワイプをバインド
   [...document.querySelectorAll(".track")].forEach(bindSwipe);
   $(".title").textContent = `LIST｜タスク（${gAll.length}件）`;
-  dbg("render() items=", gAll.length, "tracks=", document.querySelectorAll(".track").length);
 }
 
-/** ====== スワイプ ====== */
+/* ---------- スワイプ（距離×速度判定） ---------- */
 function bindSwipe(track){
-  const wrap=track.parentElement, actions=wrap.querySelector(".actions");
-  const SW_MENU=36, SW_ACTION=120;
-  let sx=0, dx=0, active=false;
+  const wrap = track.parentElement;       // .swipe-wrap
+  const actions = wrap.querySelector(".actions");
+  const id = wrap.dataset.id;
 
-  const isOpen = ()=>wrap.classList.contains("menu");
-  const open   = ()=>{ closeAll(); wrap.classList.add("menu"); actions.style.opacity=1; };
-  const close  = ()=>{ wrap.classList.remove("menu"); actions.style.opacity=0; track.style.transform="translateX(0)"; };
+  // しきい値
+  const LIGHT_DIST = 40;      // 軽スワイプ距離(px)
+  const STRONG_DIST = 120;    // 強スワイプ距離(px)
+  const VELO_STRONG = 0.6;    // 強スワイプ速度(px/ms)
 
-  function closeAll(){ document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{ w.classList.remove("menu"); const a=w.querySelector(".actions"), tr=w.querySelector(".track"); if(a) a.style.opacity=0; if(tr) tr.style.transform="translateX(0)"; }); }
+  let sx=0, dx=0, active=false, t0=0;
 
-  const start=x=>{ active=true; sx=x; dx=0; track.style.transition="none"; };
-  const move =x=>{
+  const start = (x)=>{
+    active=true; sx=x; dx=0; t0=performance.now();
+    track.style.transition="none";
+  };
+  const move = (x)=>{
     if(!active) return;
-    dx=x-sx;
-    if(isOpen()){ if(dx>16) close(); return; }
-    track.style.transform=`translateX(${dx}px)`;
-    actions.style.opacity=Math.min(1,Math.abs(dx)/80);
+    dx = x - sx;
+    track.style.transform = `translateX(${dx}px)`;
+    actions.style.opacity = Math.min(1, Math.abs(dx)/80);
   };
-  const end =async ()=>{
+  const end = async ()=>{
+    if(!active) return;
+    const dt = Math.max(1, performance.now()-t0);
+    const v = Math.abs(dx)/dt; // px/ms
+    const dir = dx>0 ? "right" : "left";
+    const strong = (Math.abs(dx)>=STRONG_DIST) || (v>=VELO_STRONG);
+    const light  = Math.abs(dx)>=LIGHT_DIST;
+
+    // reset view
     track.style.transition="transform .18s ease";
-    if(isOpen()){ if(Math.abs(dx)<12) close(); active=false; dx=0; return; }
+    track.style.transform="translateX(0)";
+    actions.style.opacity=0;
+    active=false;
 
-    let act=null;
-    if(dx<=-SW_ACTION) act="delete";
-    else if(dx>=SW_ACTION) act=(wrap.dataset.status==="completed")?"uncomplete":"complete";
-    else if(dx<=-SW_MENU) open();
-    else if(dx>=SW_MENU) act="pin";
+    // 軽スワイプ：操作バー表示のみ（非自動実行）
+    if(light && !strong){
+      openActionBar(wrap, dir);
+      return;
+    }
 
-    if(!isOpen()){ track.style.transform="translateX(0)"; actions.style.opacity=0; }
-
-    active=false; const id=wrap.dataset.id; dx=0;
-    if(!act) return;
-    try{ await runAction(id,act); }catch(e){ console.error(e); toast("エラー: "+(e.message||"failed")); }
+    // 強スワイプ：即アクション
+    if(strong){
+      const t = gAll.find(x=>x.id===id);
+      if(!t) return;
+      if(dir==="right"){
+        // 右＝完了 / 完了取消
+        const act = (t.status==="completed") ? "uncomplete" : "complete";
+        await runAction(id, act);
+      }else{
+        // 左＝削除（確認）
+        const ok = confirm("このタスクを削除しますか？");
+        if(ok) await runAction(id, "delete");
+      }
+    }
   };
 
-  wrap.querySelectorAll(".btn").forEach(b=>{
-    b.addEventListener("click", async (e)=>{
-      const id=wrap.dataset.id, act=e.currentTarget.dataset.act;
-      if(act==="detail"){ alert("詳細は別画面予定"); return; }
-      if(act==="delete" && !confirm("このタスクを削除しますか？")) return;
-      close();
-      try{ await runAction(id,act); }catch(err){ console.error(err); toast("エラー: "+(err.message||"failed")); }
-    });
-  });
-
-  track.addEventListener("touchstart",e=>start(e.touches[0].clientX),{passive:true});
-  track.addEventListener("touchmove", e=>move(e.touches[0].clientX), {passive:true});
-  track.addEventListener("touchend", end);
+  // Touch
+  track.addEventListener("touchstart", e=>start(e.touches[0].clientX), {passive:true});
+  track.addEventListener("touchmove",  e=>move(e.touches[0].clientX),   {passive:true});
+  track.addEventListener("touchend",   end);
+  // Mouse（開発用）
   track.addEventListener("mousedown", e=>start(e.clientX));
   track.addEventListener("mousemove", e=>{ if(e.buttons===1) move(e.clientX); });
   track.addEventListener("mouseup", end);
-  document.addEventListener("click", e=>{ if(!wrap.contains(e.target)) closeAll(); });
 }
 
-/** ====== API ====== */
-async function loadTasks(userId){
-  dbg("loadTasks userId=", userId);
-  const url=`${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
-  let res, payload;
+function openActionBar(wrap, dir){
+  const actions = wrap.querySelector(".actions");
+  actions.style.opacity = 1;
+  // 片側だけ強調（任意のUI）
+  actions.style.justifyContent = "space-between";
+  // 一度だけボタンを束ねてイベント付与
+  wrap.querySelectorAll(".btn").forEach(btn=>{
+    btn.addEventListener("click", async (e)=>{
+      const id = wrap.dataset.id;
+      const act = e.currentTarget.dataset.act;
+      if(act==="delete"){
+        const ok = confirm("このタスクを削除しますか？");
+        if(!ok) return;
+      }
+      await runAction(id, act);
+      actions.style.opacity = 0;
+    }, {once:true});
+  });
+}
+
+/* ---------- 通信 ---------- */
+async function load(){
+  const url = `${LIST_API_URL}?user_id=${encodeURIComponent(gUserId)}`;
+  let res, j;
   try{
-    res = await fetch(url,{method:"GET",credentials:"omit",headers:{"Content-Type":"application/json"}});
-    payload = await res.json();
-  }catch(e){ dbg("fetch/json error:", e.message||e); toast("読み込み失敗"); return; }
-  dbg("status=", res.status, "payload.ok=", payload && payload.ok);
-
-  if(!res.ok || !payload || payload.ok!==true){ toast(`読み込み失敗（HTTP ${res && res.status}）`); return; }
-
-  // 互換: {ok:true,data:[]} or {ok:true,pinned/active/completed}
-  if(Array.isArray(payload.data)){
-    gAll = payload.data;
-  }else{
-    const P = Array.isArray(payload.pinned)?payload.pinned:[];
-    const A = Array.isArray(payload.active)?payload.active:[];
-    const C = Array.isArray(payload.completed)?payload.completed:[];
-    gAll = [...P,...A,...C];
+    res = await fetch(url, {method:"GET", cache:"no-store", credentials:"omit", headers:{ "Accept":"application/json" }});
+    j = await res.json();
+  }catch(e){
+    dbg("load fetch/json error:", e.message||e);
+    toast("読み込み失敗"); return;
   }
-  dbg("gAll length=", gAll.length);
+  if(!res.ok || !j || j.ok!==true){
+    toast("読み込み失敗（HTTP "+(res&&res.status)+")"); return;
+  }
+  // 形式：{ok:true, pinned/active/completed}
+  const pinned = Array.isArray(j.pinned)?j.pinned:[];
+  const active = Array.isArray(j.active)?j.active:[];
+  const completed = Array.isArray(j.completed)?j.completed:[];
+  gAll = [...pinned, ...active, ...completed];
   render();
 }
-
-function actionLabel(a){ return ({pin:"ピン",complete:"完了",uncomplete:"取消",delete:"削除",remind:"ﾘﾏｲﾝﾄﾞ"}[a]||a); }
 
 async function runAction(id, act){
-  const body={action:act,task_id:id,user_id:gUserId};
-  const res=await fetch(ACTION_API_URL,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body)
-  });
-  const j=await res.json().catch(()=>({ok:false}));
-  if(!res.ok||!j.ok){toast("失敗しました");return;}
+  try{
+    const res = await fetch(ACTION_API_URL, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ action: act, task_id: id, user_id: gUserId })
+    });
+    const j = await res.json().catch(()=>({ok:false}));
+    if(!res.ok || j.ok===false) throw new Error(j.message||"action failed");
 
-  // ローカル即時反映
-  const t=gAll.find(t=>t.id===id);
-  if(t){
-    if(act==="delete") gAll=gAll.filter(x=>x.id!==id);
-    if(act==="complete") t.status="completed";
-    if(act==="uncomplete") t.status="active";
-    if(act==="pin") t.pinned=!t.pinned;
+    // --- ローカル即時反映 ---
+    const t = gAll.find(x=>x.id===id);
+    if(act==="delete"){
+      gAll = gAll.filter(x=>x.id!==id);
+    }else if(act==="complete" && t){
+      t.status="completed";
+      t.completed_at = new Date().toISOString();
+    }else if(act==="uncomplete" && t){
+      t.status="active";
+      t.completed_at = null;
+    }else if(act==="pin" && t){
+      t.pinned = !t.pinned;
+    }else if(act==="detail" && t){
+      alert(`［詳細（簡易表示）］\nタイトル：${t.title||'(無題)'}\n期限：${fmtJST(t.due_at)}`);
+    }else if(act==="remind" && t){
+      toast("リマインド（仮）");
+    }
+
+    render();               // ← まずUI即時更新
+    setTimeout(load, 900);  // ← 少し後にサーバー同期（反映遅延吸収）
+    toast(labelOf(act)+"しました");
+  }catch(err){
+    console.error(err);
+    toast("失敗しました");
   }
-  render();
+}
+function labelOf(a){ return ({pin:"ピン",complete:"完了",uncomplete:"取消",delete:"削除",remind:"ﾘﾏｲﾝﾄﾞ",detail:"詳細"}[a]||a); }
 
-  toast("更新しました");
-  // Supabase同期
-  setTimeout(()=>load(),1000);
+/* ---------- 起動 ---------- */
+async function bootstrap(){
+  dbg("LIFF_ID=", LIFF_ID);
+  await liff.init({ liffId: LIFF_ID });
+  dbg("liff.init OK");
+  if(!liff.isLoggedIn()) liff.login();
+  const ctx = liff.getContext?.(); if(ctx) dbg("context", ctx);
+  const prof = await liff.getProfile(); gUserId = prof.userId; $("#user-pill").textContent = "You: "+gUserId.slice(-6);
+  await load();
 }
 
-
-/** ====== 起動 ====== */
-(async function bootstrap(){
-  try{
-    dbg("LIFF_ID=", LIFF_ID);
-    await liff.init({ liffId: LIFF_ID });
-    dbg("liff.init OK");
-    if(!liff.isLoggedIn()) liff.login();
-    const ctx = liff.getContext(); dbg("context", ctx);
-    const prof = await liff.getProfile(); dbg("profile OK userId=", prof.userId);
-    gUserId = prof.userId;
-    $("#user-pill").textContent = "You: " + gUserId.slice(-6);
-
-    $("#reload").onclick = ()=>loadTasks(gUserId);
-    $("#q").addEventListener("input", e=>{
-      const q=e.target.value.trim().toLowerCase();
-      if(!q){ render(); return; }
-      const filt = gAll.filter(t=>(t.title||"").toLowerCase().includes(q) || (t.detail||"").toLowerCase().includes(q));
-      const bak = gAll; gAll=filt; render(); gAll=bak;
-    });
-
-    await loadTasks(gUserId);
-  }catch(e){
-    console.error(e);
-    dbg("bootstrap error:", e.message||e);
-    toast("初期化に失敗");
-  }
-})();
+bootstrap();
 </script>
 </body>
 </html>
-
