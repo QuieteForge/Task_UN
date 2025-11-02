@@ -124,102 +124,145 @@ async function runAction(id,act){
  左：軽い → メニュー表示、強い → 削除（確認あり）
 */
 function bindSwipe(track){
- const wrap=track.parentElement,actions=wrap.querySelector(".actions");
+  const wrap = track.parentElement, actions = wrap.querySelector(".actions");
 
- // しきい値（必要なら微調整）
- const SW_DEAD=28;     // これ以下は何もしない
- const SW_MENU=40;     // 左にこれ以上でメニュー
- const SW_ACTION=150;  // 強スワイプ閾値（左右共通）
+  // 距離しきい値（既存と同等）
+  const SW_DEAD   = 28;    // 何もしないゾーン
+  const SW_MENU   = 60;    // メニューを開く左スワイプ距離
+  const SW_ACTION = 150;   // 強スワイプ距離
 
- let sx=0,dx=0,drag=false;
+  // 速度しきい値（px/ms = 1000px/s換算）
+  const V_MENU    = 0.40;  // 左へ約0.40px/ms 以上（= 400px/s）で軽左 → メニュー
+  const V_ACTION  = 0.85;  // 左右どちらも約0.85px/ms 以上（= 850px/s）で強スワイプ
 
- const isOpen = ()=> wrap.classList.contains("menu");
- const open   = ()=> { closeAll(); wrap.classList.add("menu"); actions.style.opacity=1; track.style.transform="translateX(-96px)"; };
- const close  = ()=> { wrap.classList.remove("menu"); actions.style.opacity=0; track.style.transform="translateX(0)"; };
- function closeAll(){
-   document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{
-     w.classList.remove("menu");
-     const tr=w.querySelector(".track"); const ac=w.querySelector(".actions");
-     tr.style.transform="translateX(0)"; ac.style.opacity=0;
-   });
- }
+  let sx=0, dx=0, drag=false;
 
- // ボタンはクリック優先
- wrap.querySelectorAll(".btn").forEach(b=>{
-   b.addEventListener("click",e=>{
-     e.stopPropagation();
-     runAction(wrap.dataset.id, b.dataset.act);
-   });
- });
+  // 直近の動きを記録（150msの窓で速度推定）
+  const recent = []; // {x, t}
+  const WINDOW_MS = 150;
 
- const onStart = x => { drag=true; sx=x; dx=0; track.style.transition="none"; };
- const onMove  = x => {
-   if(!drag) return;
-   dx = x - sx;
+  const isOpen = ()=> wrap.classList.contains("menu");
+  const open   = ()=> { closeAll(); wrap.classList.add("menu"); actions.style.opacity=1; track.style.transform="translateX(-96px)"; };
+  const close  = ()=> { wrap.classList.remove("menu"); actions.style.opacity=0; track.style.transform="translateX(0)"; };
 
-   // メニューが開いてる時は「右に少し」なら閉じるジェスチャのみにする
-   if(isOpen()){
-     if(dx>16){ close(); }
-     return; // メニュー表示中はカードを自由に動かさない
-   }
+  function closeAll(){
+    document.querySelectorAll(".swipe-wrap.menu").forEach(w=>{
+      w.classList.remove("menu");
+      const tr=w.querySelector(".track"); const ac=w.querySelector(".actions");
+      tr.style.transform="translateX(0)"; ac.style.opacity=0;
+    });
+  }
 
-   // 右小スワイプは何も起きないが、視覚的に少し動かすと誤操作誘発するので最小限
-   // 左小スワイプはメニューのプレビューとして軽く動かす
-   const preview = Math.max(-96, Math.min(24, dx)); // 右に大きくは動かさない
-   track.style.transform = `translateX(${preview}px)`;
-   actions.style.opacity = Math.min(1, Math.abs(preview)/80);
- };
- const onEnd   = async () => {
-   track.style.transition="transform .18s ease";
+  // ボタンはクリック優先
+  wrap.querySelectorAll(".btn").forEach(b=>{
+    b.addEventListener("click",e=>{
+      e.stopPropagation();
+      runAction(wrap.dataset.id, b.dataset.act);
+    });
+  });
 
-   // メニュー開いてるなら、指を離したらそのまま維持（右に強く戻した時だけ閉じるのは onMove で対応）
-   if(isOpen()){ track.style.transform="translateX(-96px)"; actions.style.opacity=1; drag=false; return; }
+  function pushRecent(x){
+    const now = performance.now();
+    recent.push({x, t: now});
+    // 150ms より古いサンプルを捨てる
+    while (recent.length && (now - recent[0].t) > WINDOW_MS) recent.shift();
+  }
+  function currentVelocity(){
+    if (recent.length < 2) return 0;
+    const a = recent[0], b = recent[recent.length-1];
+    const dt = b.t - a.t; if (dt <= 0) return 0;
+    return (b.x - a.x) / dt; // px/ms（+が右、-が左）
+  }
 
-   const dist = dx;
-   let act=null;
+  const onStart = x => {
+    drag = true;
+    sx = x; dx = 0;
+    recent.length = 0;
+    pushRecent(x);
+    track.style.transition = "none";
+  };
 
-   if (dist >= SW_ACTION) {
-     // 強い右：完了/取消
-     act = (wrap.dataset.status==="completed") ? "uncomplete" : "complete";
-   } else if (dist <= -SW_ACTION) {
-     // 強い左：削除（後で confirm。ここでは act 指定だけ）
-     act = "delete";
-   } else if (dist <= -SW_MENU) {
-     // 軽い左：メニュー
-     open();
-   } else if (Math.abs(dist) <= SW_DEAD) {
-     // 何もしない
-   }
+  const onMove = x => {
+    if(!drag) return;
+    dx = x - sx;
+    pushRecent(x);
 
-   // 位置を戻す
-   if(!isOpen()){ track.style.transform="translateX(0)"; actions.style.opacity=0; }
+    if(isOpen()){
+      // メニュー開いてる時に右へ少し動いたら閉じる
+      if (dx > 16) close();
+      return;
+    }
 
-   // 実行
-   if(act){
-     if(act==="delete"){
-       // 強い左は必ず確認
-       const yes = confirm("このタスクを削除しますか？");
-       if(!yes){ drag=false; dx=0; return; }
-     }
-     await runAction(wrap.dataset.id, act);
-   }
+    // 視覚的プレビュー（右へは少しだけ、左は最大-96px）
+    const preview = Math.max(-96, Math.min(24, dx));
+    track.style.transform = `translateX(${preview}px)`;
+    actions.style.opacity = Math.min(1, Math.abs(preview)/80);
+  };
 
-   drag=false; dx=0;
- };
+  const onEnd = async () => {
+    track.style.transition = "transform .18s ease";
 
- // マウス/タッチ両対応
- track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
- track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
- track.addEventListener("touchend",  onEnd);
- track.addEventListener("touchcancel", onEnd);
+    // 速度計算（直近150msの平均速度）
+    const v = currentVelocity(); // px/ms（+右 / -左）
+    const dist = dx;
 
- track.addEventListener("mousedown",e=>onStart(e.clientX));
- track.addEventListener("mousemove",e=>{ if(e.buttons===1) onMove(e.clientX); });
- track.addEventListener("mouseup",onEnd);
+    // メニュー開いてたら維持（右に戻すは onMove で閉じる）
+    if(isOpen()){
+      track.style.transform = "translateX(-96px)";
+      actions.style.opacity = 1;
+      drag=false; dx=0; recent.length=0;
+      return;
+    }
 
- // カード外タップで他のメニューは閉じる
- document.addEventListener("click",e=>{ if(!wrap.contains(e.target)) closeAll(); });
+    let act = null;
+
+    // ===== 強スワイプ（速度 or 距離） =====
+    if (v >=  V_ACTION || dist >=  SW_ACTION) {
+      // 強い右 → 完了 / 取り消し
+      act = (wrap.dataset.status === "completed") ? "uncomplete" : "complete";
+    } else if (v <= -V_ACTION || dist <= -SW_ACTION) {
+      // 強い左 → 削除（後でconfirm）
+      act = "delete";
+    } else {
+      // ===== 軽左（速度 or 距離）でメニュー =====
+      if (v <= -V_MENU || dist <= -SW_MENU) {
+        open();
+      } else if (Math.abs(dist) <= SW_DEAD) {
+        // 何もしない
+      }
+    }
+
+    // 位置を戻す（メニューを開いた場合は open() 内で調整済み）
+    if(!isOpen()){
+      track.style.transform = "translateX(0)";
+      actions.style.opacity = 0;
+    }
+
+    if (act) {
+      if (act === "delete") {
+        const yes = confirm("このタスクを削除しますか？");
+        if (!yes) { drag=false; dx=0; recent.length=0; return; }
+      }
+      await runAction(wrap.dataset.id, act);
+    }
+
+    drag=false; dx=0; recent.length=0;
+  };
+
+  // マウス/タッチ両対応
+  track.addEventListener("touchstart",e=>onStart(e.touches[0].clientX),{passive:true});
+  track.addEventListener("touchmove", e=>onMove(e.touches[0].clientX),{passive:true});
+  track.addEventListener("touchend",  onEnd);
+  track.addEventListener("touchcancel", onEnd);
+
+  track.addEventListener("mousedown",e=>onStart(e.clientX));
+  track.addEventListener("mousemove",e=>{ if(e.buttons===1) onMove(e.clientX); });
+  track.addEventListener("mouseup",onEnd);
+
+  // カード外クリックで他のメニューは閉じる
+  document.addEventListener("click",e=>{ if(!wrap.contains(e.target)) closeAll(); });
 }
+
 
 /* ===== 起動 ===== */
 (async()=>{
@@ -232,3 +275,4 @@ function bindSwipe(track){
 </script>
 </body>
 </html>
+
