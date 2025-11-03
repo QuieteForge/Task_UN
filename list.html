@@ -5,103 +5,240 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>LIST｜タスク</title>
   <style>
-    :root{
-      --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
-      --pill:#eef2ff; --accent:#3957ff; --ok:#16a34a; --warn:#eab308; --danger:#ef4444;
-      --left-ok-bg:#ecfdf5;   /* 未完了→完了（緑） */
-      --left-warn-bg:#fffbeb; /* 完了→未完了（黄） */
-      --right-bg:#fef2f2;     /* 削除側 */
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:var(--bg); color:var(--ink);
-      font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    }
-    header{
-      position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); z-index:10;
-    }
-    .bar{display:flex; align-items:center; gap:8px; justify-content:space-between; padding:12px 16px;}
-    .title{font-weight:650; letter-spacing:.2px}
-    .pill{padding:6px 10px; border-radius:999px; background:var(--pill); font-size:12px}
-    main{padding:14px; max-width:720px; margin:0 auto}
+:root{
+  --bg:#f7f7f8;
+  --card:#fff;
+  --ink:#111;
+  --sub:#666;
+  --line:#e9e9ec;
+  --pill:#eef2ff;
+  --accent:#3957ff;
+  --ok:#16a34a;
+  --warn:#eab308;
+  --danger:#ef4444;
+  --left-ok-bg:#ecfdf5;
+  --left-warn-bg:#fffbeb;
+  --right-bg:#fef2f2;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font:15px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  -webkit-font-smoothing:antialiased;
+}
+header{
+  position:sticky;
+  top:0;
+  background:var(--card);
+  border-bottom:1px solid var(--line);
+  z-index:10;
+  backdrop-filter:blur(6px);
+}
+.bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 16px;
+  gap:8px;
+}
+.title{
+  font-weight:650;
+  letter-spacing:.25px;
+}
+.pill{
+  background:var(--pill);
+  border-radius:999px;
+  padding:5px 10px;
+  font-size:12px;
+}
+main{
+  padding:14px;
+  max-width:720px;
+  margin:0 auto;
+}
 
-    .section{margin:18px 0}
-    .section h3{margin:8px 6px 10px; font-size:13px; color:var(--sub); font-weight:600}
+/* ====== セクション ====== */
+.section{margin:20px 0;}
+.section h3{margin:8px 6px 10px;color:var(--sub);font-size:13px;font-weight:600}
 
-    /* ===== スワイプコンテナ（背面） ===== */
-    .swipe-wrap{
-      position:relative; border-radius:16px; margin:10px 0;
-      background:
-        linear-gradient(90deg, var(--left-ok-bg) 0 50%, var(--right-bg) 50% 100%);
-      background-size:200% 100%;
-      background-position:50% 0;  /* 初期は中央＝帯が見えない */
-      overflow:hidden; border:1px solid var(--line);
-      box-shadow:0 1px 0 rgba(0,0,0,.03);
-    }
-    /* 完了済みは未完了ボタン（黄）を示す帯に差し替え */
-    .swipe-wrap.left-warn{
-      background:
-        linear-gradient(90deg, var(--left-warn-bg) 0 50%, var(--right-bg) 50% 100%);
-      background-size:200% 100%;
-      background-position:50% 0;
-    }
+/* ===== スワイプカード背景 ===== */
+.swipe-wrap{
+  position:relative;
+  border-radius:16px;
+  margin:10px 0;
+  background:
+    linear-gradient(90deg,var(--left-ok-bg) 0 50%,var(--right-bg) 50% 100%);
+  background-size:200% 100%;
+  background-position:50% 0;
+  overflow:hidden;
+  border:1px solid var(--line);
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  transition:background-position .25s ease;
+}
+.swipe-wrap.left-warn{
+  background:
+    linear-gradient(90deg,var(--left-warn-bg) 0 50%,var(--right-bg) 50% 100%);
+  background-size:200% 100%;
+  background-position:50% 0;
+}
 
-    /* 背面アクションボタン列（左右） */
-    .actions{
-      position:absolute; inset:0; display:flex; justify-content:space-between; align-items:center; padding:0 8px; pointer-events:none;
-    }
-    .actions .left, .actions .right{display:flex; gap:8px}
-    .btn{
-      pointer-events:auto; padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:#fff; font-size:12px;
-      user-select:none;
-    }
-    .btn.ok{border-color:#c7ecd1; color:var(--ok); background:#fff}       /* 完了（緑） */
-    .btn.uncomplete{border-color:#fde68a; color:var(--warn); background:#fff} /* 未完了に戻す（黄） */
-    .btn.info{border-color:#dbeafe; color:#2563eb; background:#fff}
-    .btn.danger{border-color:#fecaca; color:var(--danger); background:#fff}
+/* ===== 背面ボタンエリア ===== */
+.actions{
+  position:absolute;
+  inset:0;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:0 10px;
+  pointer-events:none;
+}
+.actions .left,
+.actions .right{
+  display:flex;
+  gap:8px;
+}
+.btn{
+  pointer-events:auto;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background:#fff;
+  padding:8px 12px;
+  font-size:12px;
+  transition:.15s ease;
+  user-select:none;
+}
+.btn:active{transform:scale(.95);}
+.btn.ok{color:var(--ok);border-color:#c7ecd1}
+.btn.uncomplete{color:var(--warn);border-color:#fde68a}
+.btn.info{color:#2563eb;border-color:#dbeafe}
+.btn.danger{color:var(--danger);border-color:#fecaca}
 
-    /* ===== 表面トラック（横に動く） ===== */
-    .track{
-      position:relative; background:var(--card); /* 透け防止 */
-      touch-action:pan-y; will-change:transform;
-    }
-    .card{padding:12px 14px;}
-    .row{display:flex; align-items:center; gap:8px}
-    .titleTxt{flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-    .meta{display:flex; gap:8px; color:var(--sub); font-size:12px}
-    .chip{padding:2px 8px; border-radius:999px; border:1px solid var(--line)}
-    .ghost .titleTxt{opacity:.45} /* 完了時テキストだけ薄く（ボタンは透けない） */
+/* ===== 表面カード ===== */
+.track{
+  position:relative;
+  background:var(--card);
+  will-change:transform;
+  touch-action:pan-y;
+  transition:transform .2s ease;
+}
+.card{
+  padding:14px 16px;
+}
+.row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.titleTxt{
+  flex:1;
+  font-weight:600;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.meta{
+  display:flex;
+  gap:8px;
+  color:var(--sub);
+  font-size:12px;
+}
+.chip{
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:#fff;
+}
+.ghost .titleTxt{opacity:.45}
 
-    /* ===== 詳細ビュー（折りたたみ） ===== */
-    .detail{
-      max-height:0; overflow:hidden; transition:max-height .24s ease, padding .24s ease, border .24s ease;
-      padding:0 14px; border-top:1px solid transparent; background:#fff;
-    }
-    .detail.open{
-      padding:10px 14px 14px; border-top:1px solid var(--line);
-    }
-    .detail .grid{display:grid; grid-template-columns:96px 1fr; gap:8px 10px; align-items:center}
-    .detail label{font-size:12px; color:var(--sub)}
-    .detail input,.detail select,.detail textarea{
-      width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:10px; font:inherit; background:#fff;
-    }
-    .detail textarea{min-height:72px; resize:vertical}
-    .detail .rowBtns{display:flex; gap:8px; justify-content:flex-end; margin-top:10px}
-    .toolbar{display:flex; gap:8px; padding:8px}
-    .toolbar input{flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff}
-    .toolbar button{padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#fff}
+/* ===== 詳細ビュー ===== */
+.detail{
+  max-height:0;
+  overflow:hidden;
+  padding:0 14px;
+  border-top:1px solid transparent;
+  background:#fff;
+  transition:max-height .25s ease, padding .25s ease, border .25s ease;
+}
+.detail.open{
+  padding:10px 14px 14px;
+  border-top:1px solid var(--line);
+}
+.detail .grid{
+  display:grid;
+  grid-template-columns:96px 1fr;
+  gap:8px 10px;
+  align-items:center;
+}
+.detail label{
+  font-size:12px;
+  color:var(--sub);
+}
+.detail input,
+.detail select,
+.detail textarea{
+  width:100%;
+  padding:8px 10px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  font:inherit;
+  background:#fff;
+}
+.detail textarea{min-height:72px;resize:vertical}
+.detail .rowBtns{
+  display:flex;
+  gap:8px;
+  justify-content:flex-end;
+  margin-top:10px;
+}
 
-    .empty{color:var(--sub); text-align:center; padding:36px 12px}
-    .toast{
-      position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111; color:#fff;
-      padding:10px 14px; border-radius:999px; font-size:13px; opacity:0; transition:.25s; z-index:50;
-    }
-    .toast.show{opacity:1}
+/* ===== ツールバー ===== */
+.toolbar{
+  display:flex;
+  gap:8px;
+  padding:8px;
+}
+.toolbar input{
+  flex:1;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+}
+.toolbar button{
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#fff;
+  font-weight:500;
+}
 
-    /* スワイプ中の過度スクロール抑制 */
-    .no-scroll{overflow:hidden; touch-action:none}
-  </style>
+/* ===== その他 ===== */
+.empty{
+  color:var(--sub);
+  text-align:center;
+  padding:36px 12px;
+}
+.toast{
+  position:fixed;
+  left:50%;
+  bottom:18px;
+  transform:translateX(-50%);
+  background:#111;
+  color:#fff;
+  padding:10px 14px;
+  border-radius:999px;
+  font-size:13px;
+  opacity:0;
+  transition:.25s;
+  z-index:50;
+}
+.toast.show{opacity:1}
+.no-scroll{overflow:hidden;touch-action:none}
+</style>
+
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
@@ -578,3 +715,4 @@ bootstrap();
 </script>
 </body>
 </html>
+
