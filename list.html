@@ -9,97 +9,57 @@
 
   <title>LIST｜タスク</title>
   <style>
-    :root{
-      --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
-      --pill:#eef2ff; --accent:#3957ff; --ok:#16a34a; --warn:#eab308; --danger:#ef4444;
-      --left-bg:#ecfdf5;   /* 完了側の帯 */
-      --right-bg:#fef2f2;  /* 削除側の帯 */
-    }
-    *{box-sizing:border-box}
-    html,body{height:100%}
-    body{
-      margin:0; background:var(--bg); color:var(--ink);
-      font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    }
-    header{
-      position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); z-index:10;
-    }
-    .bar{display:flex; align-items:center; gap:8px; justify-content:space-between; padding:12px 16px;}
-    .title{font-weight:650; letter-spacing:.2px}
-    .pill{padding:6px 10px; border-radius:999px; background:var(--pill); font-size:12px}
-    main{padding:14px; max-width:720px; margin:0 auto}
+:root{
+  --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
+  --pill:#eef2ff; --accent:#3957ff;
+  --ok:#16a34a; --warn:#eab308; --danger:#ef4444;
+  --left-ok-bg:#ecfdf5;   /* 完了側（緑） */
+  --left-warn-bg:#fffbeb; /* 未完了側（黄） */
+  --right-bg:#fef2f2;     /* 削除側 */
+}
 
-    .section{margin:18px 0}
-    .section h3{margin:8px 6px 10px; font-size:13px; color:var(--sub); font-weight:600}
+/* === 左右スワイプ帯 === */
+.swipe-wrap{
+  position:relative;
+  border-radius:16px;
+  margin:10px 0;
+  background:
+    linear-gradient(90deg, var(--left-ok-bg) 0 50%, var(--right-bg) 50% 100%);
+  background-size:200% 100%;
+  background-position:50% 0;
+  overflow:hidden;
+  border:1px solid var(--line);
+  box-shadow:0 1px 0 rgba(0,0,0,.03);
+}
+/* 完了済みタスクは黄色帯（未完了へ戻す） */
+.swipe-wrap.left-warn{
+  background:
+    linear-gradient(90deg, var(--left-warn-bg) 0 50%, var(--right-bg) 50% 100%);
+  background-size:200% 100%;
+  background-position:50% 0;
+}
 
-    .swipe-wrap{
-      position:relative; border-radius:16px; margin:10px 0;
-      /* 背面の左右帯 */
-      background:
-        linear-gradient(90deg, var(--left-bg) 0 50%, var(--right-bg) 50% 100%);
-      background-size:200% 100%;
-      background-position:50% 0;  /* 中央が白＝見えない */
-      overflow:hidden; border:1px solid var(--line);
-      box-shadow:0 1px 0 rgba(0,0,0,.03);
-    }
-    /* 背面アクションボタン列（左右） */
-    .actions{
-      position:absolute; inset:0; display:flex; justify-content:space-between; align-items:center; padding:0 8px; pointer-events:none;
-    }
-    .actions .left, .actions .right{display:flex; gap:8px}
-    .btn{
-      pointer-events:auto; padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:#fff; font-size:12px;
-      user-select:none;
-    }
-    .btn.ok{border-color:#c7ecd1; color:var(--ok); background:#fff}
-    .btn.info{border-color:#dbeafe; color:#2563eb; background:#fff}
-    .btn.danger{border-color:#fecaca; color:var(--danger); background:#fff}
+/* === ボタン色 === */
+.btn.ok{
+  border-color:#c7ecd1;
+  color:var(--ok);
+  background:#fff;
+}
+.btn.uncomplete{
+  border-color:#fde68a;
+  color:var(--warn);
+  background:#fff;
+}
+.btn.info{
+  border-color:#dbeafe;
+  color:#2563eb;
+}
+.btn.danger{
+  border-color:#fecaca;
+  color:var(--danger);
+}
+</style>
 
-    /* 表面トラック（これが横に動く） */
-    .track{
-      position:relative; background:var(--card); /* 透けないように不透明 */
-      touch-action:pan-y; will-change:transform;
-    }
-    .card{padding:12px 14px;}
-    .row{display:flex; align-items:center; gap:8px}
-    .titleTxt{flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-    .meta{display:flex; gap:8px; color:var(--sub); font-size:12px}
-    .chip{padding:2px 8px; border-radius:999px; border:1px solid var(--line)}
-    .ghost .titleTxt{opacity:.45} /* 完了時のテキストのみ薄く */
-
-    /* 詳細ビュー（折りたたみ） */
-    .detail{
-      max-height:0; overflow:hidden; transition:max-height .24s ease, padding .24s ease, border .24s ease;
-      padding:0 14px; border-top:1px solid transparent; background:#fff;
-    }
-    .detail.open{
-      padding:10px 14px 14px; border-top:1px solid var(--line); /* open時だけ */
-    }
-    .detail .grid{display:grid; grid-template-columns:96px 1fr; gap:8px 10px; align-items:center}
-    .detail label{font-size:12px; color:var(--sub)}
-    .detail input,.detail select,.detail textarea{
-      width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:10px; font:inherit; background:#fff;
-    }
-    .detail textarea{min-height:72px; resize:vertical}
-    .detail .rowBtns{display:flex; gap:8px; justify-content:flex-end; margin-top:10px}
-    .x-close{
-      position:absolute; right:10px; top:8px; font-size:18px; line-height:1; cursor:pointer; color:#999; user-select:none;
-    }
-
-    .toolbar{display:flex; gap:8px; padding:8px}
-    .toolbar input{flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff}
-    .toolbar button{padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#fff}
-
-    .empty{color:var(--sub); text-align:center; padding:36px 12px}
-    .toast{
-      position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111; color:#fff;
-      padding:10px 14px; border-radius:999px; font-size:13px; opacity:0; transition:.25s; z-index:50;
-    }
-    .toast.show{opacity:1}
-
-    /* スナップ鈍感タップ対策 */
-    .no-scroll{overflow:hidden; touch-action:none}
-  </style>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
@@ -179,22 +139,23 @@ function splitGroups(all){
 
 function cardHTML(t){
   const due = fmtJST(t.due_at);
-  const isCompleted = t.status==='completed';
-  const leftLabel = isCompleted? '未完了':'完了';
-  const leftAct   = isCompleted? 'uncomplete':'complete';
-
+  const isCompleted = t.status === 'completed';
+  const act = isCompleted ? 'uncomplete' : 'complete';
+  const lab = isCompleted ? '未完了' : '完了';
+  const cls = isCompleted ? 'uncomplete' : 'ok';
+  const leftClass = isCompleted ? 'swipe-wrap left-warn' : 'swipe-wrap';
+  
   return `
-  <div class="swipe-wrap" data-id="${t.id}">
+  <div class="${leftClass}" data-id="${t.id}">
     <div class="actions">
       <div class="left">
-        <button class="btn ok" data-act="${leftAct}">${leftLabel}</button>
+        <button class="btn ${cls}" data-act="${act}">${lab}</button>
       </div>
       <div class="right">
-        <button class="btn info"   data-act="detail">詳細</button>
+        <button class="btn info" data-act="detail">詳細</button>
         <button class="btn danger" data-act="delete">削除</button>
       </div>
     </div>
-
     <div class="track ${isCompleted?'ghost':''}">
       <div class="card">
         <div class="row">
@@ -205,34 +166,29 @@ function cardHTML(t){
           </div>
         </div>
       </div>
-
-      <div class="detail" id="detail-${t.id}">
-        // <span class="x-close" data-close="1">×</span>✖ボタン削除
+      <div class="detail" aria-hidden="true">
         <div class="grid">
           <label>コメント</label>
-          <textarea name="detail">${esc(t.detail||'')}</textarea>
-
+          <textarea name="detail"></textarea>
           <label>優先度</label>
           <select name="priority">
-            <option value="1" ${t.priority==1?'selected':''}>1</option>
-            <option value="2" ${t.priority==2?'selected':''}>2</option>
-            <option value="3" ${t.priority==3?'selected':''}>3</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
           </select>
-
           <label>期限</label>
-          <input name="due_at" type="datetime-local" value="${toLocalValue(t.due_at)}"/>
-
+          <input type="datetime-local" name="due_at"/>
           <label>リマインド</label>
-          <input name="remind_at" type="datetime-local" value="${toLocalValue(defaultRemind(t))}"/>
+          <input type="datetime-local" name="remind_at"/>
         </div>
         <div class="rowBtns">
-          <button class="btn" data-daction="cancel">閉じる</button>
-          <button class="btn ok" data-daction="save">保存</button>
+          <button class="btn info" data-act="save">保存</button>
         </div>
       </div>
     </div>
   </div>`;
 }
+
 function toLocalValue(iso){
   if(!iso) return '';
   const d = new Date(iso);
@@ -588,4 +544,5 @@ bootstrap();
 </script>
 </body>
 </html>
+
 
