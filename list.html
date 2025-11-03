@@ -3,84 +3,77 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LIST｜タスク</title>
+<title>LIST｜タスク一覧</title>
 <style>
   :root{
-    --bg:#f7f7f8;--card:#fff;--ink:#111;--sub:#666;--line:#e9e9ec;
-    --pill:#eef2ff;--accent:#3957ff;--ok:#16a34a;--warn:#eab308;--danger:#ef4444;
-    --shadow:0 1px 0 rgba(0,0,0,.03);
-    --snap:120px; /* ← 軽スワイプのスナップ距離（両側共通） */
-    --reveal:140px; /* ボタン全体が見える距離（目安） */
+    --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
+    --accent:#3957ff; --ok:#16a34a; --danger:#ef4444;
   }
-  *{box-sizing:border-box}
-  html,body{height:100%}
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
   body{
-    margin:0;background:var(--bg);color:var(--ink);
+    margin:0; background:var(--bg); color:var(--ink);
     font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
   }
-  header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);z-index:10}
-  .bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px}
-  .title{font-weight:650;letter-spacing:.2px}
-  .pill{padding:6px 10px;border-radius:999px;background:var(--pill);font-size:12px}
-  main{padding:14px;max-width:740px;margin:0 auto}
-  .toolbar{display:flex;gap:8px;padding:8px}
-  .toolbar input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff}
-  .toolbar button{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#fff}
-  .section{margin:18px 0}
-  .section h3{margin:8px 6px 10px;font-size:13px;color:var(--sub);font-weight:600}
+  header{
+    position:sticky; top:0; background:var(--card);
+    border-bottom:1px solid var(--line); z-index:10;
+  }
+  .bar{ display:flex; align-items:center; gap:8px; justify-content:space-between; padding:12px 16px; }
+  .title{ font-weight:650; letter-spacing:.2px; }
+  .pill{ padding:6px 10px; border-radius:999px; background:#eef2ff; font-size:12px; }
 
-  /* カード */
-  .swipe-wrap{position:relative;border-radius:16px;overflow:visible;margin:10px 0}
+  main{ padding:14px; max-width:720px; margin:0 auto; }
+  .toolbar{ display:flex; gap:8px; padding:8px 0; }
+  .toolbar input{ flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  .toolbar button{ padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#fff; }
+
+  .section{ margin:18px 0; }
+  .section h3{ margin:8px 6px 10px; font-size:13px; color:var(--sub); font-weight:600; }
+
   .card{
-    background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0;box-shadow:var(--shadow);
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:12px 14px; margin:10px 0; box-shadow:0 1px 0 rgba(0,0,0,.03);
+    touch-action:pan-y; /* 縦スクロールはOK、横はドラッグ用 */
   }
-  .track{
-    position:relative;background:#fff;border-radius:16px;
-    transform:translateX(0);transition:transform .18s ease, box-shadow .18s ease;
-    touch-action:pan-y; will-change: transform;
-  }
-  .row{display:flex;align-items:center;gap:8px;padding:12px 14px}
-  .titleTxt{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .meta{display:flex;gap:8px;color:var(--sub);font-size:12px}
-  .due{padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
-  .pin{font-size:12px;color:var(--accent)}
-  .ghost{opacity:.45}
+  .row{ display:flex; align-items:center; gap:8px; }
+  .titleTxt{ flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta{ display:flex; gap:8px; color:var(--sub); font-size:12px; }
+  .due{ padding:2px 8px; border-radius:999px; border:1px solid var(--line); }
 
-  /* 背面アクション */
-  .actions{
-    position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;
-    padding:0 8px;pointer-events:none;opacity:0;transition:opacity .15s;
+  .btns{ display:flex; gap:6px; }
+  .btn{
+    padding:6px 10px; border-radius:10px; border:1px solid var(--line); background:#fff; font-size:12px; cursor:pointer;
   }
-  .actions.show{opacity:1}
-  .side{display:flex;gap:6px}
-  .btn{pointer-events:auto;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:12px}
-  .btn.ok{border-color:#c7ecd1;color:var(--ok);background:#ecfdf5}
-  .btn.warn{border-color:#fde68a;color:var(--warn);background:#fffbeb}
-  .btn.danger{border-color:#fecaca;color:var(--danger);background:#fef2f2}
+  .btn.ok{ border-color:#c7ecd1; color:var(--ok); background:#ecfdf5; }
+  .btn.danger{ border-color:#fecaca; color:var(--danger); background:#fef2f2; }
 
-  /* 詳細ビュー */
+  .ghost{ opacity:.45; }
+  .placeholder{
+    border:2px dashed var(--accent); background:#f0f4ff; border-radius:16px; height:56px; margin:10px 0;
+  }
+  .dragging{ opacity:.8; box-shadow:0 6px 16px rgba(0,0,0,.12); }
+
   .detail{
-    display:none;border-top:1px dashed var(--line);padding:10px 14px;background:#fff;border-radius:0 0 16px 16px
+    margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:none;
   }
-  .detail.open{display:block}
-  .detail .grid{display:grid;grid-template-columns:100px 1fr;gap:10px 12px;align-items:center}
-  .detail input[type="datetime-local"],
-  .detail select,.detail textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff}
-  .detail textarea{min-height:72px;resize:vertical}
-  .detail .actions-line{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-  .close-x{
-    position:absolute;right:10px;top:10px;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:2px 8px;background:#fff;font-size:12px;color:#666;
+  .detail.open{ display:block; }
+  .detail .row2{ display:grid; grid-template-columns:88px 1fr; gap:8px; align-items:center; margin:8px 0; }
+  .detail input, .detail select, .detail textarea{
+    width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; background:#fff; font:inherit;
   }
+  .detail .hdr{ display:flex; align-items:center; justify-content:space-between; }
+  .detail .close{ cursor:pointer; font-size:18px; line-height:1; padding:4px 10px; }
 
-  .empty{color:var(--sub);text-align:center;padding:36px 12px}
   .toast{
-    position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
-    background:#111;color:#fff;padding:10px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.25s
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+    background:#111; color:#fff; padding:10px 14px; border-radius:999px; font-size:13px;
+    opacity:0; transition:.2s;
   }
-  .toast.show{opacity:1}
+  .toast.show{ opacity:1; }
 
-  /* デバッグ */
-  #debug{white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #eee;padding:8px;margin:8px;border-radius:8px}
+  /* スナップ時に上下余白を少し広げて見やすく */
+  .drop-zone{ margin:4px 0; }
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
@@ -94,17 +87,12 @@
 
 <main>
   <div class="toolbar">
-    <input id="q" placeholder="検索（タイトル/詳細）">
+    <input id="q" placeholder="検索（タイトル/詳細）" />
     <button id="reload">再読込</button>
   </div>
 
-  <div id="pinned" class="section" hidden>
-    <h3>📌 ピン留め</h3>
-    <div id="pinned-list"></div>
-  </div>
-
   <div id="active" class="section">
-    <h3>📝 未完了</h3>
+    <h3>📝 未完了（優先度で並び替え／長押しで並び替え）</h3>
     <div id="active-list"></div>
   </div>
 
@@ -113,415 +101,441 @@
     <div id="completed-list"></div>
   </div>
 
-  <div id="empty" class="empty" hidden>まだタスクがありません。LINEでメッセージを送ると追加されます。</div>
+  <div id="empty" class="section" hidden>まだタスクがありません。LINEでメッセージを送ると追加されます。</div>
 </main>
 
-<pre id="debug"></pre>
+<pre id="debug" style="white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #eee;padding:8px;margin:8px;border-radius:8px;"></pre>
 <div id="toast" class="toast"></div>
 
 <script>
-/** ========= 設定 ========= */
-const LIFF_ID = "2008311584-NdJqOqMn";
-const LIST_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-list";
-const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action";
-/** ======================= */
+/** ================= 設定 ================= */
+const LIFF_ID = "2008311584-NdJqOqMn";                           // ← あなたのLIFF ID
+const LIST_API_URL   = "https://lumicreate.xvps.jp/webhook/webhook-list";   // n8n: LIST (GET)
+const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action"; // n8n: ACTION (POST)
+/** ======================================= */
 
 let gUserId = null;
-let gAllTasks = [];
+let gAllTasks = [];   // supabase そのまま
+// 優先度内の並び順を保持するローカルキャッシュ（優先度ごとに id 配列）
+let gOrderMap = new Map();  // key: priority(number or null)-> value: [id,id,...]
 
-const $ = (s)=>document.querySelector(s);
-const $$ = (s)=>Array.from(document.querySelectorAll(s));
-const $pinned = $("#pinned"); const $pinnedList = $("#pinned-list");
-const $activeList = $("#active-list");
-const $completed = $("#completed"); const $completedList = $("#completed-list");
-const $empty = $("#empty");
+const $ = (sel)=>document.querySelector(sel);
+const $activeList = $('#active-list');
+const $completedList = $('#completed-list');
+const $completed = $('#completed');
+const $empty = $('#empty');
 
-function dbg(...a){ const el=$("#debug"); if(!el) return; el.textContent += a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' ')+"\n"; }
-
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1400); }
-
-function fmtJST(iso){
-  if(!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo", month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit"});
-}
-
-function sortTasks(all){
-  // pinned desc, priority desc (nullは最下位), due asc (nullは下), created_at asc
-  return all.slice().sort((a,b)=>{
-    const ap = a.pinned?1:0, bp = b.pinned?1:0;
-    if (ap!==bp) return bp-ap;
-    const apr = Number.isFinite(a.priority)?a.priority:-1;
-    const bpr = Number.isFinite(b.priority)?b.priority:-1;
-    if (apr!==bpr) return bpr-apr;
-    const ad = a.due_at? new Date(a.due_at).getTime(): Number.MAX_SAFE_INTEGER;
-    const bd = b.due_at? new Date(b.due_at).getTime(): Number.MAX_SAFE_INTEGER;
-    if (ad!==bd) return ad-bd;
-    const ac = a.created_at? new Date(a.created_at).getTime(): 0;
-    const bc = b.created_at? new Date(b.created_at).getTime(): 0;
-    return ac-bc;
-  });
-}
+function dbg(...a){ const el=$('#debug'); if(!el) return; el.textContent += a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' ')+'\n'; }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1400); }
+function fmtJST(iso){ if(!iso) return ""; const d=new Date(iso); return d.toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}); }
 
 function splitByStatus(all){
-  const now=Date.now(), weekAgo = now - 7*24*3600*1000;
-  const pinned=[], active=[], completed=[];
+  const now=Date.now(), weekAgo=now-7*24*3600*1000;
+  const active=[], completed=[];
   for(const t of all){
-    if (t.status==="deleted"||t.status==="archived") continue;
-    if (t.status==="completed"){
-      const cAt = t.completed_at? new Date(t.completed_at).getTime():0;
-      if (cAt>=weekAgo) completed.push(t);
+    if(t.status==='completed'){
+      const cAt=t.completed_at? new Date(t.completed_at).getTime():0;
+      if(cAt>=weekAgo) completed.push(t);
       continue;
     }
-    if (t.pinned){ pinned.push(t); continue; }
+    if(t.status==='deleted' || t.status==='archived') continue;
     active.push(t);
   }
-  return { pinned, active, completed };
+  return { active, completed };
+}
+
+// 並び順：優先度（大きいほど上）→ 同優先度は gOrderMap の順（無ければ取得順）
+// priority が null/undefined の場合は 0 として扱う
+function sortActive(arr){
+  // order map を初期化
+  gOrderMap.clear();
+  for(const t of arr){
+    const p = Number.isFinite(t.priority)? t.priority : 0;
+    if(!gOrderMap.has(p)) gOrderMap.set(p,[]);
+    gOrderMap.get(p).push(t.id);
+  }
+  // 実際のソート
+  const byPriority = arr.slice().sort((a,b)=>{
+    const ap = Number.isFinite(a.priority)? a.priority:0;
+    const bp = Number.isFinite(b.priority)? b.priority:0;
+    if(bp!==ap) return bp-ap; // 大きい優先
+    // 同優先→ gOrderMap の順
+    const seq = gOrderMap.get(ap) || [];
+    return seq.indexOf(a.id) - seq.indexOf(b.id);
+  });
+  return byPriority;
+}
+
+function render(){
+  const {active, completed} = splitByStatus(gAllTasks);
+  const actSorted = sortActive(active);
+  $activeList.innerHTML = actSorted.map(cardHTML).join('');
+  $completed.hidden = completed.length===0;
+  $completedList.innerHTML = completed.map(cardHTML).join('');
+
+  // 詳細の開閉、ボタンイベント
+  bindCardEvents();
+
+  // 並び替え（長押しドラッグ）は「未完了」リストのみ有効
+  bindDragSort($activeList);
+  $empty.hidden = actSorted.length>0;
+  $('.title').textContent = 'LIST｜タスク（未完了: '+actSorted.length+'件）';
 }
 
 function cardHTML(t){
   const dueTxt = fmtJST(t.due_at);
-  const pin = t.pinned ? '<span class="pin">📌</span> ' : '';
-  const ghost = t.status==="completed" ? " ghost" : "";
+  const pr = Number.isFinite(t.priority)? t.priority:0;
   return `
-<div class="swipe-wrap card" data-id="${t.id}" data-status="${t.status||'active'}" data-pinned="${t.pinned?1:0}">
-  <div class="actions">
-    <div class="side left">
-      <button class="btn ok" data-act="complete">${t.status==="completed" ? "取消" : "完了"}</button>
-      <button class="btn" data-act="pin">${t.pinned?"ピン解除":"ピン"}</button>
-    </div>
-    <div class="side right">
-      <button class="btn" data-act="detail">詳細</button>
-      <button class="btn danger" data-act="delete">削除</button>
-    </div>
-  </div>
-  <div class="track${ghost}">
-    <div class="row tap-toggle">
-      <div class="titleTxt">${pin}${escapeHTML(t.title||"(無題)")}</div>
+  <div class="card" data-id="${t.id}" data-priority="${pr}">
+    <div class="row">
+      <div class="titleTxt js-toggle-detail">${escapeHTML(t.title || '(無題)')}</div>
       <div class="meta">
-        ${Number.isFinite(t.priority)?`<span class="due">★${t.priority}</span>`:""}
-        <span class="due">⏰ ${escapeHTML(dueTxt)}</span>
+        <span class="due">★${pr}</span>
+        ${dueTxt? `<span class="due">⏰ ${escapeHTML(dueTxt)}</span>` : ``}
+      </div>
+      <div class="btns">
+        <button class="btn ok" data-act="complete">完了</button>
+        <button class="btn" data-act="detail">詳細</button>
+        <button class="btn danger" data-act="delete">削除</button>
       </div>
     </div>
-
-    <div class="detail" hidden>
-      <span class="close-x" data-act="close">✕</span>
-      <div class="grid">
-        <label>コメント</label>
-        <textarea name="detail" placeholder="メモ">${escapeHTML(t.detail||"")}</textarea>
-
-        <label>優先度</label>
-        <select name="priority">
-          ${[1,2,3].map(v=>`<option value="${v}" ${t.priority==v?"selected":""}>${v}</option>`).join("")}
+    <div class="detail" id="detail-${t.id}">
+      <div class="hdr">
+        <strong>詳細編集</strong>
+        <span class="close" data-close="1">✕</span>
+      </div>
+      <div class="row2">
+        <div>コメント</div>
+        <textarea rows="3" data-field="detail" placeholder="メモなど...">${escapeHTML(t.detail||'')}</textarea>
+      </div>
+      <div class="row2">
+        <div>優先度</div>
+        <select data-field="priority">
+          ${[3,2,1,0].map(v=>`<option value="${v}" ${v===pr?'selected':''}>${v}</option>`).join('')}
         </select>
-
-        <label>期限</label>
-        <input name="due_at" type="datetime-local" value="${toLocalValue(t.due_at) || defaultTodayEndLocal()}"/>
-
-        <label>リマインド</label>
-        <input name="remind" type="datetime-local" value="${toLocalValue((t.remind_times||[])[0]) || defaultRemindLocal(toLocalValue(t.due_at)||defaultTodayEndLocal())}"/>
       </div>
-      <div class="actions-line">
-        <button class="btn" data-act="cancel-detail">キャンセル</button>
-        <button class="btn ok" data-act="save-detail">保存</button>
+      <div class="row2">
+        <div>期限</div>
+        <input type="datetime-local" data-field="due_at" value="${toLocalInputValue(t.due_at)}" />
+      </div>
+      <div class="row2">
+        <div>リマインド</div>
+        <input type="datetime-local" data-field="remind_times" value="${toLocalInputValue((t.remind_times||[])[0])}" />
+      </div>
+      <div style="text-align:right; margin-top:8px;">
+        <button class="btn" data-save="1">保存</button>
       </div>
     </div>
-  </div>
-</div>`;
+  </div>`;
 }
 
 function escapeHTML(s){
-  return String(s||"").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+function toLocalInputValue(iso){
+  if(!iso) return '';
+  const d=new Date(iso);
+  const pad=n=>String(n).padStart(2,'0');
+  const yyyy=d.getFullYear();
+  const mm=pad(d.getMonth()+1);
+  const dd=pad(d.getDate());
+  const hh=pad(d.getHours());
+  const mi=pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+function fromLocalInputValue(v){
+  if(!v) return null;
+  const d=new Date(v);
+  return d.toISOString();
 }
 
-function toLocalValue(iso){
-  if(!iso) return "";
-  const d = new Date(iso);
-  // yyyy-MM-ddTHH:mm
-  const pad = n=>String(n).padStart(2,"0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function defaultTodayEndLocal(){
-  const d = new Date();
-  d.setHours(23,59,0,0);
-  return toLocalValue(d.toISOString());
-}
-function defaultRemindLocal(dueLocal){
-  // dueLocal: "yyyy-MM-ddTHH:mm" → 2時間前
-  const d = new Date(dueLocal);
-  d.setHours(d.getHours()-2);
-  return toLocalValue(d.toISOString());
-}
-function localToUTCString(localValue){
-  if(!localValue) return null;
-  // localValueは "yyyy-MM-ddTHH:mm"
-  const d = new Date(localValue);
-  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString(); // UTC
-}
-
-/* -------- 描画 -------- */
-function render(){
-  const { pinned, active, completed } = splitByStatus(gAllTasks);
-  const pinSorted = sortTasks(pinned);
-  const actSorted = sortTasks(active);
-  const compSorted = sortTasks(completed);
-
-  $pinned.hidden = pinSorted.length===0;
-  $completed.hidden = compSorted.length===0;
-  $empty.hidden = (pinSorted.length + actSorted.length) > 0;
-
-  $pinnedList.innerHTML = pinSorted.map(cardHTML).join("");
-  $activeList.innerHTML = actSorted.map(cardHTML).join("");
-  $completedList.innerHTML = compSorted.map(cardHTML).join("");
-
-  // バインド
-  $$(".swipe-wrap .track").forEach(bindSwipe);
-  // タップで詳細トグル
-  $$(".tap-toggle").forEach(row=>{
-    row.addEventListener("click", (e)=>{
-      const wrap = row.closest(".swipe-wrap");
-      toggleDetail(wrap);
-    });
+function bindCardEvents(){
+  // タイトル or detailボタンで詳細開閉、×でクローズ。別のカードを開く時は他を閉じる
+  document.querySelectorAll('.js-toggle-detail, .btn[data-act="detail"]').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      const card = el.closest('.card');
+      toggleDetail(card.dataset.id);
+    }, {passive:false});
   });
-  // detailのボタン系
-  $$(".detail [data-act='close']").forEach(btn=>{
-    btn.addEventListener("click",(e)=>{
-      const wrap = btn.closest(".swipe-wrap"); closeDetail(wrap);
-    });
+  document.querySelectorAll('.detail .close').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      const card = el.closest('.card');
+      openDetail(null); // 全閉
+    }, {passive:false});
   });
-  $$(".detail [data-act='cancel-detail']").forEach(btn=>{
-    btn.addEventListener("click",(e)=>{
-      const wrap = btn.closest(".swipe-wrap"); closeDetail(wrap);
-    });
+  // 保存
+  document.querySelectorAll('.detail [data-save]').forEach(el=>{
+    el.addEventListener('click', async e=>{
+      e.preventDefault(); e.stopPropagation();
+      const card = el.closest('.card');
+      await saveDetail(card);
+    }, {passive:false});
   });
-  $$(".detail [data-act='save-detail']").forEach(btn=>{
-    btn.addEventListener("click", async (e)=>{
-      const wrap = btn.closest(".swipe-wrap");
-      await saveDetail(wrap);
-    });
+  // 完了 / 削除
+  document.querySelectorAll('.btn[data-act="complete"]').forEach(el=>{
+    el.addEventListener('click', async e=>{
+      e.preventDefault(); e.stopPropagation();
+      const card = el.closest('.card');
+      await runAction(card.dataset.id,'complete');
+    }, {passive:false});
   });
-
-  document.querySelector(".title").textContent = `LIST｜タスク（${gAllTasks.length}件）`;
-}
-
-/* ------ 詳細ビュー ------ */
-function toggleDetail(wrap){
-  // 他を閉じる
-  $$(".detail.open").forEach(d=>{
-    if (d.closest(".swipe-wrap")!==wrap) d.classList.remove("open");
+  document.querySelectorAll('.btn[data-act="delete"]').forEach(el=>{
+    el.addEventListener('click', async e=>{
+      e.preventDefault(); e.stopPropagation();
+      const card = el.closest('.card');
+      if(!confirm('このタスクを削除しますか？')) return;
+      await runAction(card.dataset.id,'delete');
+    }, {passive:false});
   });
-  const det = wrap.querySelector(".detail");
-  det.classList.toggle("open");
-  det.hidden = !det.classList.contains("open");
-}
-function closeDetail(wrap){
-  const det = wrap.querySelector(".detail");
-  det.classList.remove("open");
-  det.hidden = true;
-}
-async function saveDetail(wrap){
-  const id = wrap.dataset.id;
-  const det = wrap.querySelector(".detail");
-  const detail = det.querySelector("[name='detail']").value.trim();
-  const priority = parseInt(det.querySelector("[name='priority']").value,10);
-  const dueLocal = det.querySelector("[name='due_at']").value;
-  const remindLocal = det.querySelector("[name='remind']").value;
-
-  const fields = {
-    detail,
-    priority: Number.isFinite(priority) ? priority : 1,
-    due_at: localToUTCString(dueLocal),
-    remind_times: remindLocal? [ localToUTCString(remindLocal) ] : [],
-  };
-  const ok = await postAction("update",{ task_id:id, fields });
-  if (!ok) { toast("更新に失敗"); return; }
-  toast("更新しました");
-  closeDetail(wrap);
-  await loadTasks(gUserId);
 }
 
-/* ------ アクション共通 ------ */
-function actionLabel(a){
-  return ({pin:"ピン", "toggle-pin":"ピン", complete:"完了", uncomplete:"取消", delete:"削除", detail:"詳細"}[a]||a);
-}
-async function onAction(wrap, action){
-  try{
-    const id = wrap.dataset.id;
-    const status = (wrap.dataset.status||"active");
-    let payload = { task_id:id, user_id:gUserId };
-
-    if (action==="delete"){
-      if (!confirm("このタスクを削除しますか？")) return;
-    }
-    if (action==="pin" || action==="toggle-pin"){
-      const cur = wrap.dataset.pinned==="1";
-      payload.wantPinned = !cur;
-      action = "pin"; // サーバー側は 'pin' ブランチで受ける
-    }
-    if (action==="complete"){
-      // 完了済なら取消へ
-      if (status==="completed"){ action="uncomplete"; }
-    }
-    const ok = await postAction(action, payload);
-    if (!ok) throw new Error("failed");
-    toast(actionLabel(action) + "しました");
-    await loadTasks(gUserId);
-  }catch(err){
-    console.error(err); toast("エラー: "+(err.message||"failed"));
+function openDetail(id){
+  document.querySelectorAll('.detail').forEach(d=>d.classList.remove('open'));
+  if(id){
+    const panel = document.getElementById('detail-'+id);
+    if(panel) panel.classList.add('open');
   }
 }
-async function postAction(action, payload){
-  const res = await fetch(ACTION_API_URL,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ action, ...payload })
-  });
-  const j = await res.json().catch(()=>({ok:false}));
-  return res.ok && j && j.ok!==false;
+function toggleDetail(id){
+  const panel = document.getElementById('detail-'+id);
+  if(!panel) return;
+  const opened = panel.classList.contains('open');
+  openDetail(null);
+  if(!opened) panel.classList.add('open');
 }
 
-/* ------ スワイプ操作 ------ */
-function bindSwipe(track){
-  const wrap = track.closest(".swipe-wrap");
-  const actions = wrap.querySelector(".actions");
-  let sx=0, sy=0, dx=0, dy=0, active=false, lastX=0, lastT=0, vx=0;
-  let snapped = 0; // -1:左にスナップ, 0:なし, 1:右にスナップ
-  const SNAP = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--snap")) || 120;
-  const STRONG_DIST = 180;        // これ超えたら強スワイプ
-  const STRONG_VEL  = 0.7;        // px/ms くらいの感覚（大きいほど強い）
-  const MAX_SHIFT = 240;          // 限界変位（見た目用）
+async function saveDetail(cardEl){
+  const id = cardEl.dataset.id;
+  const panel = cardEl.querySelector('.detail');
+  const f = sel => panel.querySelector(`[data-field="${sel}"]`);
+  const patch = {
+    detail: (f('detail')?.value||'').trim(),
+    priority: Number(f('priority')?.value||0),
+    due_at: fromLocalInputValue(f('due_at')?.value||''),
+    remind_times: (()=>{
+      const v = fromLocalInputValue(f('remind_times')?.value||'');
+      return v? [v] : [];
+    })()
+  };
+  try{
+    const res = await fetch(ACTION_API_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'update', task_id:id, user_id:gUserId, fields:patch })
+    });
+    const j = await res.json();
+    if(!res.ok || j.ok===false) throw new Error(j.message||'update failed');
+    toast('保存しました');
+    await loadTasks();
+    // 保存後に詳細を閉じる場合は下行を有効化
+    // openDetail(null);
+  }catch(e){
+    console.error(e);
+    toast('エラー: '+(e.message||'failed'));
+  }
+}
 
-  const setX = (x)=>{
-    track.style.transform = `translateX(${x}px)`;
-    actions.classList.toggle("show", Math.abs(x)>30);
-  };
-  const snapTo = (dir)=>{ // dir: -1 左, 1 右, 0 解除
-    snapped = dir;
-    if (dir===0){ setX(0); return; }
-    setX(dir*SNAP);
-  };
-  const pointerDown = (x,y)=>{
-    active=true; sx=x; sy=y; dx=0; dy=0; lastX=x; lastT=performance.now();
-    track.style.transition="none";
-  };
-  const pointerMove = (x,y)=>{
-    if(!active) return;
-    dx = x - sx; dy = y - sy;
-    // 横方向優先、縦揺れは無視
-    const nx = Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT, dx));
-    setX(nx);
-    // 速度
-    const t = performance.now();
-    const dt = Math.max(1, t - lastT);
-    vx = (x - lastX)/dt; lastX=x; lastT=t;
-  };
-  const pointerUp = async ()=>{
-    track.style.transition = "transform .18s ease";
-    const abs = Math.abs(dx);
-    const dir = dx>0 ? 1 : (dx<0 ? -1 : 0);
-    // 強スワイプ判定（距離 or 速度）
-    if (abs>STRONG_DIST || Math.abs(vx)>STRONG_VEL){
-      setX(0);
-      if (dir>0){
-        // 右強：完了 or 取消
-        await onAction(wrap,"complete");
-      }else if (dir<0){
-        // 左強：削除（確認あり）
-        await onAction(wrap,"delete");
-      }
-      return;
+async function runAction(id, action){
+  try{
+    const body = { action, task_id:id, user_id:gUserId };
+    if(action==='complete'){
+      // 「完了→未完了」トグルにしたい場合はサーバ側で切り替え実装でもOK
+      // ここでは完了に固定
     }
-    // 軽スワイプ → スナップ固定（ボタン操作可能）
-    if (abs>60){
-      snapTo(dir); // ±SNAPへ固定
-      // ボタンにハンドラ
-      wireActionButtons(wrap);
-      // トラックをタップで閉じる
-      const closer = (e)=>{
-        // ボタンクリック時は閉じない
-        if (e.target.closest(".btn")) return;
-        snapTo(0);
-        track.removeEventListener("click", closer);
-      };
-      track.addEventListener("click", closer);
+    const res = await fetch(ACTION_API_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const j = await res.json().catch(()=>({ok:false}));
+    if(!res.ok || j.ok===false) throw new Error(j.message||'action failed');
+    toast(({complete:'完了にしました', delete:'削除しました'})[action] || 'OK');
+    await loadTasks();
+  }catch(e){
+    console.error(e);
+    toast('エラー: '+(e.message||'failed'));
+  }
+}
+
+/* ====== 並び替え（長押しドラッグ） ======
+   - 「未完了」セクションでのみ有効
+   - 同じ優先度（★）同士のみ上下入れ替え可
+   - ドロップ後: ACTION_API_URL に {action:'reorder', priority, ordered_ids:[...]} を送信
+*/
+function bindDragSort(container){
+  // 一旦、過去ハンドラを綺麗に
+  container.querySelectorAll('.card').forEach(card=>{
+    card.onpointerdown = card.onpointermove = card.onpointerup = null;
+    card.ontouchstart = card.ontouchmove = card.ontouchend = null;
+    card.onmousedown = card.onmousemove = card.onmouseup = null;
+  });
+
+  let pressTimer=null, dragging=null, startY=0, lastY=0, placeholder=null, originNext=null, groupNodes=null, groupTop=0, groupBottom=0;
+
+  function longPressStart(card, clientY){
+    // 同一優先度グループを抽出
+    const pr = Number(card.dataset.priority||0);
+    groupNodes = [...container.querySelectorAll(`.card[data-priority="${pr}"]`)];
+    if(groupNodes.length<=1) return; // 並び替え不要
+
+    dragging = card;
+    startY = lastY = clientY;
+
+    card.classList.add('dragging');
+    // プレースホルダ
+    placeholder = document.createElement('div');
+    placeholder.className = 'placeholder drop-zone';
+    card.parentNode.insertBefore(placeholder, card.nextSibling);
+
+    // 位置固定のため card を絶対配置風に
+    const rect = card.getBoundingClientRect();
+    const offsetY = clientY - rect.top;
+    card.style.position='fixed';
+    card.style.left = rect.left+'px';
+    card.style.width = rect.width+'px';
+    card.style.top = (clientY - offsetY)+'px';
+    card.style.zIndex = 50;
+
+    // グループ範囲
+    const rects = groupNodes.map(n=>n.getBoundingClientRect());
+    groupTop = Math.min(...rects.map(r=>r.top));
+    groupBottom = Math.max(...rects.map(r=>r.bottom));
+
+    originNext = placeholder.nextElementSibling;
+    // スクロール中の選択を防止
+    document.body.style.userSelect='none';
+  }
+
+  function longPressMove(clientY){
+    if(!dragging) return;
+    // 移動
+    const rect = dragging.getBoundingClientRect();
+    const dy = clientY - lastY;
+    lastY = clientY;
+    dragging.style.top = (rect.top + dy) + 'px';
+
+    // 挿入位置更新（グループ内）
+    const centerY = rect.top + dy + rect.height/2;
+    // 安全に再計算
+    const siblings = [...container.querySelectorAll(`.card[data-priority="${dragging.dataset.priority}"]`)]
+      .filter(n=>n!==dragging);
+    let insertBefore = null;
+    for(const sib of siblings){
+      const r = sib.getBoundingClientRect();
+      if(centerY < (r.top + r.height/2)){ insertBefore = sib; break; }
+    }
+    if(insertBefore){
+      container.insertBefore(placeholder, insertBefore);
     }else{
-      snapTo(0);
+      // 最後尾
+      const last = siblings[siblings.length-1];
+      if(last) last.after(placeholder);
     }
-    active=false; dx=0; dy=0; vx=0;
-  };
+  }
 
-  const onTouchStart = (e)=>pointerDown(e.touches[0].clientX, e.touches[0].clientY);
-  const onTouchMove  = (e)=>pointerMove(e.touches[0].clientX, e.touches[0].clientY);
-  const onTouchEnd   = (e)=>pointerUp();
-  const onMouseDown  = (e)=>{ if(e.button!==0) return; pointerDown(e.clientX, e.clientY); };
-  const onMouseMove  = (e)=>{ if(e.buttons!==1) return; pointerMove(e.clientX, e.clientY); };
-  const onMouseUp    = (e)=>pointerUp();
+  async function longPressEnd(){
+    if(!dragging) return;
+    const card = dragging;
+    card.classList.remove('dragging');
+    card.style.position=''; card.style.left=''; card.style.top=''; card.style.width=''; card.style.zIndex='';
 
-  track.addEventListener("touchstart", onTouchStart, {passive:true});
-  track.addEventListener("touchmove", onTouchMove, {passive:true});
-  track.addEventListener("touchend", onTouchEnd);
-  track.addEventListener("mousedown", onMouseDown);
-  track.addEventListener("mousemove", onMouseMove);
-  track.addEventListener("mouseup", onMouseUp);
-}
+    // プレースホルダ位置へ差し替え
+    placeholder.replaceWith(card);
+    placeholder=null;
 
-function wireActionButtons(wrap){
-  wrap.querySelectorAll(".btn").forEach(b=>{
-    b.onclick = async (e)=>{
-      const act = e.currentTarget.dataset.act;
-      if (act==="detail"){ toggleDetail(wrap); return; }
-      if (act==="close"){ closeDetail(wrap); return; }
-      if (act==="save-detail"){ await saveDetail(wrap); return; }
-      await onAction(wrap, act);
-    };
+    document.body.style.userSelect='';
+    // 新しい順序を確定し、サーバへ通知
+    const pr = Number(card.dataset.priority||0);
+    const ordered = [...container.querySelectorAll(`.card[data-priority="${pr}"]`)].map(n=>n.dataset.id);
+    // ローカル順序も更新
+    gOrderMap.set(pr, ordered);
+
+    try{
+      const res = await fetch(ACTION_API_URL, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'reorder', user_id:gUserId, priority:pr, ordered_ids:ordered })
+      });
+      const j = await res.json().catch(()=>({ok:false}));
+      if(!res.ok || j.ok===false) throw new Error(j.message||'reorder failed');
+      toast('並び順を保存しました');
+    }catch(e){
+      console.error(e);
+      toast('エラー: '+(e.message||'failed'));
+      // 失敗時は再読み込みで整合
+      await loadTasks();
+    }
+    dragging=null;
+  }
+
+  // 長押し検出（スマホ/PC両対応）
+  container.querySelectorAll('.card').forEach(card=>{
+    const start = (y)=>{ clearTimeout(pressTimer); pressTimer = setTimeout(()=>longPressStart(card,y), 350); };
+    const move  = (y)=>{ if(pressTimer && Math.abs(y-startY)>8) { /*長押し前に大移動なら解除*/ } if(dragging) longPressMove(y); };
+    const end   = ()=>{ clearTimeout(pressTimer); longPressEnd(); };
+
+    // Touch
+    card.addEventListener('touchstart', e=>{ const t=e.touches[0]; start(t.clientY); }, {passive:true});
+    card.addEventListener('touchmove',  e=>{ const t=e.touches[0]; move(t.clientY); }, {passive:true});
+    card.addEventListener('touchend',   end);
+
+    // Mouse（開発用）
+    card.addEventListener('mousedown', e=>{ start(e.clientY); });
+    card.addEventListener('mousemove', e=>{ if(dragging) move(e.clientY); });
+    card.addEventListener('mouseup',   end);
+    card.addEventListener('mouseleave',()=>{ if(dragging) longPressEnd(); });
   });
 }
 
-/* ------ データロード ------ */
 async function loadTasks(userId){
   if(!userId){
-    const prof = await liff.getProfile(); userId = prof.userId; gUserId=userId;
+    try{
+      const prof = await liff.getProfile(); userId = prof.userId;
+    }catch(e){ toast('ユーザー取得に失敗'); return; }
   }
-  const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
-  let res, payload;
+  gUserId = userId;
+  $('#user-pill').textContent = 'You: ' + gUserId.slice(-6);
+
   try{
-    res = await fetch(url,{ method:"GET", credentials:"omit", headers:{ "Content-Type":"application/json" }});
-    payload = await res.json();
+    const res = await fetch(`${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`);
+    const payload = await res.json();
+    if(!res.ok || !payload || payload.ok!==true){
+      toast('読み込み失敗'); return;
+    }
+    // 旧形式 {ok:true,data:[]} も一応サポート
+    const pinned = Array.isArray(payload.pinned)? payload.pinned : [];
+    const active = Array.isArray(payload.active)? payload.active :
+                   Array.isArray(payload.data)? payload.data : [];
+    const completed = Array.isArray(payload.completed)? payload.completed : [];
+    gAllTasks = [...pinned, ...active, ...completed];
+    dbg('loaded items=', gAllTasks.length);
+    render();
   }catch(e){
-    dbg("fetch/json error:", e.message||e); toast("読み込み失敗"); return;
+    console.error(e); toast('読み込み失敗（通信/JSON）');
   }
-  if(!res.ok || !payload || payload.ok!==true){ toast("読み込み失敗（HTTP "+res.status+"）"); return; }
-  const pinned = Array.isArray(payload.pinned)?payload.pinned:[];
-  const active = Array.isArray(payload.active)?payload.active:[];
-  const completed = Array.isArray(payload.completed)?payload.completed:[];
-  gAllTasks = [...pinned, ...active, ...completed];
-  render();
 }
 
-/* ------ 起動 ------ */
 async function bootstrap(){
-  dbg("LIFF_ID=", LIFF_ID);
   await liff.init({ liffId: LIFF_ID });
-  dbg("liff.init OK");
-  if (!liff.isLoggedIn()) liff.login();
-  const ctx = liff.getContext(); dbg("context", ctx);
-  const prof = await liff.getProfile(); gUserId = prof.userId;
-  $("#user-pill").textContent = "You: "+ gUserId.slice(-6);
+  if(!liff.isLoggedIn()) liff.login();
+  const prof = await liff.getProfile();
+  gUserId = prof.userId;
+  $('#user-pill').textContent = 'You: ' + gUserId.slice(-6);
 
-  $("#reload").onclick = ()=>loadTasks(gUserId);
-  $("#q").addEventListener("input",(e)=>{
+  $('#reload').onclick = ()=> loadTasks(gUserId);
+  $('#q').addEventListener('input', e=>{
     const q = e.target.value.trim().toLowerCase();
-    if (!q){ render(); return; }
+    if(!q){ render(); return; }
     const filtered = gAllTasks.filter(t=>
-      (t.title||"").toLowerCase().includes(q) ||
-      (t.detail||"").toLowerCase().includes(q)
+      (t.title||'').toLowerCase().includes(q) ||
+      (t.detail||'').toLowerCase().includes(q)
     );
-    const { pinned, active, completed } = splitByStatus(filtered);
-    $pinned.hidden = pinned.length===0; $completed.hidden = completed.length===0; $empty.hidden = true;
-    $pinnedList.innerHTML = sortTasks(pinned).map(cardHTML).join("");
-    $activeList.innerHTML = sortTasks(active).map(cardHTML).join("");
-    $completedList.innerHTML = sortTasks(completed).map(cardHTML).join("");
-    $$(".swipe-wrap .track").forEach(bindSwipe);
+    const {active, completed} = splitByStatus(filtered);
+    const actSorted = sortActive(active);
+    $activeList.innerHTML = actSorted.map(cardHTML).join('');
+    $completed.hidden = completed.length===0;
+    $completedList.innerHTML = completed.map(cardHTML).join('');
+    bindCardEvents();
+    bindDragSort($activeList);
   });
 
   await loadTasks(gUserId);
