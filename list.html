@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <title>LIST｜タスク</title>
   <style>
     :root{
@@ -203,7 +207,7 @@ function cardHTML(t){
       </div>
 
       <div class="detail" id="detail-${t.id}">
-        <span class="x-close" data-close="1">×</span>
+        // <span class="x-close" data-close="1">×</span>✖ボタン削除
         <div class="grid">
           <label>コメント</label>
           <textarea name="detail">${esc(t.detail||'')}</textarea>
@@ -584,3 +588,4 @@ bootstrap();
 </script>
 </body>
 </html>
+
