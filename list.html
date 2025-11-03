@@ -257,18 +257,18 @@ async function loadTasks(userId){
     userId = prof.userId; gUserId = userId;
   }
   const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
-  dbg('GET',url);
+  // dbg('GET',url);
   let res,payload;
   try{
     res = await fetch(url, {method:'GET', credentials:'omit', headers:{'Content-Type':'application/json'}});
     payload = await res.json();
   }catch(e){
-    dbg('fetch/json error:', e.message||e);
+    // dbg('fetch/json error:', e.message||e);
     toast('読み込み失敗');
     return;
   }
   if(!res.ok || !payload || payload.ok!==true){
-    dbg('status=',res.status,'payload.ok=',payload?.ok);
+    // dbg('status=',res.status,'payload.ok=',payload?.ok);
     toast('読み込み失敗（HTTP '+res.status+'）');
     return;
   }
@@ -521,7 +521,7 @@ async function runAction(taskId, action, extra={}){
     const j = await res.json().catch(()=>({ok:false}));
     if (!res.ok || j.ok===false){
       toast('action failed');
-      dbg('action failed:', action, j);
+      // dbg('action failed:', action, j);
       return false;
     }
     // ローカル反映（最低限）
@@ -545,7 +545,7 @@ async function runAction(taskId, action, extra={}){
     toast(label+'しました');
     return true;
   }catch(e){
-    dbg('runAction error', e.message||e);
+    // dbg('runAction error', e.message||e);
     toast('エラー: '+(e.message||'failed'));
     return false;
   }
@@ -553,9 +553,9 @@ async function runAction(taskId, action, extra={}){
 
 /* ============ 起動 ============ */
 async function bootstrap(){
-  dbg('LIFF_ID=', LIFF_ID);
+  // dbg('LIFF_ID=', LIFF_ID);
   await liff.init({liffId: LIFF_ID});
-  dbg('liff.init OK');
+  // dbg('liff.init OK');
   if (!liff.isLoggedIn()) liff.login();
   const prof = await liff.getProfile();
   gUserId = prof.userId;
@@ -584,3 +584,4 @@ bootstrap();
 </script>
 </body>
 </html>
+
