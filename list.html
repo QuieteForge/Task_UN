@@ -3,63 +3,105 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-
   <title>LIST｜タスク</title>
   <style>
-:root{
-  --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
-  --pill:#eef2ff; --accent:#3957ff;
-  --ok:#16a34a; --warn:#eab308; --danger:#ef4444;
-  --left-ok-bg:#ecfdf5;   /* 完了側（緑） */
-  --left-warn-bg:#fffbeb; /* 未完了側（黄） */
-  --right-bg:#fef2f2;     /* 削除側 */
-}
+    :root{
+      --bg:#f7f7f8; --card:#fff; --ink:#111; --sub:#666; --line:#e9e9ec;
+      --pill:#eef2ff; --accent:#3957ff; --ok:#16a34a; --warn:#eab308; --danger:#ef4444;
+      --left-ok-bg:#ecfdf5;   /* 未完了→完了（緑） */
+      --left-warn-bg:#fffbeb; /* 完了→未完了（黄） */
+      --right-bg:#fef2f2;     /* 削除側 */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--ink);
+      font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    header{
+      position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); z-index:10;
+    }
+    .bar{display:flex; align-items:center; gap:8px; justify-content:space-between; padding:12px 16px;}
+    .title{font-weight:650; letter-spacing:.2px}
+    .pill{padding:6px 10px; border-radius:999px; background:var(--pill); font-size:12px}
+    main{padding:14px; max-width:720px; margin:0 auto}
 
-/* === 左右スワイプ帯 === */
-.swipe-wrap{
-  position:relative;
-  border-radius:16px;
-  margin:10px 0;
-  background:
-    linear-gradient(90deg, var(--left-ok-bg) 0 50%, var(--right-bg) 50% 100%);
-  background-size:200% 100%;
-  background-position:50% 0;
-  overflow:hidden;
-  border:1px solid var(--line);
-  box-shadow:0 1px 0 rgba(0,0,0,.03);
-}
-/* 完了済みタスクは黄色帯（未完了へ戻す） */
-.swipe-wrap.left-warn{
-  background:
-    linear-gradient(90deg, var(--left-warn-bg) 0 50%, var(--right-bg) 50% 100%);
-  background-size:200% 100%;
-  background-position:50% 0;
-}
+    .section{margin:18px 0}
+    .section h3{margin:8px 6px 10px; font-size:13px; color:var(--sub); font-weight:600}
 
-/* === ボタン色 === */
-.btn.ok{
-  border-color:#c7ecd1;
-  color:var(--ok);
-  background:#fff;
-}
-.btn.uncomplete{
-  border-color:#fde68a;
-  color:var(--warn);
-  background:#fff;
-}
-.btn.info{
-  border-color:#dbeafe;
-  color:#2563eb;
-}
-.btn.danger{
-  border-color:#fecaca;
-  color:var(--danger);
-}
-</style>
+    /* ===== スワイプコンテナ（背面） ===== */
+    .swipe-wrap{
+      position:relative; border-radius:16px; margin:10px 0;
+      background:
+        linear-gradient(90deg, var(--left-ok-bg) 0 50%, var(--right-bg) 50% 100%);
+      background-size:200% 100%;
+      background-position:50% 0;  /* 初期は中央＝帯が見えない */
+      overflow:hidden; border:1px solid var(--line);
+      box-shadow:0 1px 0 rgba(0,0,0,.03);
+    }
+    /* 完了済みは未完了ボタン（黄）を示す帯に差し替え */
+    .swipe-wrap.left-warn{
+      background:
+        linear-gradient(90deg, var(--left-warn-bg) 0 50%, var(--right-bg) 50% 100%);
+      background-size:200% 100%;
+      background-position:50% 0;
+    }
 
+    /* 背面アクションボタン列（左右） */
+    .actions{
+      position:absolute; inset:0; display:flex; justify-content:space-between; align-items:center; padding:0 8px; pointer-events:none;
+    }
+    .actions .left, .actions .right{display:flex; gap:8px}
+    .btn{
+      pointer-events:auto; padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:#fff; font-size:12px;
+      user-select:none;
+    }
+    .btn.ok{border-color:#c7ecd1; color:var(--ok); background:#fff}       /* 完了（緑） */
+    .btn.uncomplete{border-color:#fde68a; color:var(--warn); background:#fff} /* 未完了に戻す（黄） */
+    .btn.info{border-color:#dbeafe; color:#2563eb; background:#fff}
+    .btn.danger{border-color:#fecaca; color:var(--danger); background:#fff}
+
+    /* ===== 表面トラック（横に動く） ===== */
+    .track{
+      position:relative; background:var(--card); /* 透け防止 */
+      touch-action:pan-y; will-change:transform;
+    }
+    .card{padding:12px 14px;}
+    .row{display:flex; align-items:center; gap:8px}
+    .titleTxt{flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .meta{display:flex; gap:8px; color:var(--sub); font-size:12px}
+    .chip{padding:2px 8px; border-radius:999px; border:1px solid var(--line)}
+    .ghost .titleTxt{opacity:.45} /* 完了時テキストだけ薄く（ボタンは透けない） */
+
+    /* ===== 詳細ビュー（折りたたみ） ===== */
+    .detail{
+      max-height:0; overflow:hidden; transition:max-height .24s ease, padding .24s ease, border .24s ease;
+      padding:0 14px; border-top:1px solid transparent; background:#fff;
+    }
+    .detail.open{
+      padding:10px 14px 14px; border-top:1px solid var(--line);
+    }
+    .detail .grid{display:grid; grid-template-columns:96px 1fr; gap:8px 10px; align-items:center}
+    .detail label{font-size:12px; color:var(--sub)}
+    .detail input,.detail select,.detail textarea{
+      width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:10px; font:inherit; background:#fff;
+    }
+    .detail textarea{min-height:72px; resize:vertical}
+    .detail .rowBtns{display:flex; gap:8px; justify-content:flex-end; margin-top:10px}
+    .toolbar{display:flex; gap:8px; padding:8px}
+    .toolbar input{flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fff}
+    .toolbar button{padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:#fff}
+
+    .empty{color:var(--sub); text-align:center; padding:36px 12px}
+    .toast{
+      position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111; color:#fff;
+      padding:10px 14px; border-radius:999px; font-size:13px; opacity:0; transition:.25s; z-index:50;
+    }
+    .toast.show{opacity:1}
+
+    /* スワイプ中の過度スクロール抑制 */
+    .no-scroll{overflow:hidden; touch-action:none}
+  </style>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
@@ -89,25 +131,23 @@
   <div id="empty" class="empty" hidden>まだタスクがありません。LINEでメッセージを送ると追加されます。</div>
 </main>
 
-<pre id="debug" style="white-space:pre-wrap;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #eee;padding:8px;margin:8px;border-radius:8px;"></pre>
 <div id="toast" class="toast"></div>
 
 <script>
 /** ========= 設定 ========= */
-const LIFF_ID       = "2008311584-NdJqOqMn";
-const LIST_API_URL  = "https://lumicreate.xvps.jp/webhook/webhook-list";
-const ACTION_API_URL= "https://lumicreate.xvps.jp/webhook/webhook-action";
+const LIFF_ID        = "2008311584-NdJqOqMn";
+const LIST_API_URL   = "https://lumicreate.xvps.jp/webhook/webhook-list";
+const ACTION_API_URL = "https://lumicreate.xvps.jp/webhook/webhook-action";
 /** ======================= */
 
 let gUserId = null;
 let gAllTasks = [];  // {id,title,detail,priority,due_at,status,completed_at,remind_times...}
 
 const $ = sel => document.querySelector(sel);
-const $activeList = $('#active-list');
+const $activeList    = $('#active-list');
 const $completedList = $('#completed-list');
-const $empty = $('#empty');
+const $empty         = $('#empty');
 
-function dbg(...a){ const el=$('#debug'); if(!el) return; el.textContent += a.map(x=> typeof x==='string'?x:JSON.stringify(x)).join(' ')+'\n'; }
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1400); }
 function fmtJST(iso){ if(!iso) return ''; const d=new Date(iso); return d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
@@ -137,58 +177,6 @@ function splitGroups(all){
   return {active, completed};
 }
 
-function cardHTML(t){
-  const due = fmtJST(t.due_at);
-  const isCompleted = t.status === 'completed';
-  const act = isCompleted ? 'uncomplete' : 'complete';
-  const lab = isCompleted ? '未完了' : '完了';
-  const cls = isCompleted ? 'uncomplete' : 'ok';
-  const leftClass = isCompleted ? 'swipe-wrap left-warn' : 'swipe-wrap';
-  
-  return `
-  <div class="${leftClass}" data-id="${t.id}">
-    <div class="actions">
-      <div class="left">
-        <button class="btn ${cls}" data-act="${act}">${lab}</button>
-      </div>
-      <div class="right">
-        <button class="btn info" data-act="detail">詳細</button>
-        <button class="btn danger" data-act="delete">削除</button>
-      </div>
-    </div>
-    <div class="track ${isCompleted?'ghost':''}">
-      <div class="card">
-        <div class="row">
-          <div class="titleTxt">${esc(t.title)||'(無題)'}</div>
-          <div class="meta">
-            ${Number.isFinite(t.priority)? `<span class="chip">★${t.priority}</span>`:''}
-            ${due? `<span class="chip">⏰ ${esc(due)}</span>`:''}
-          </div>
-        </div>
-      </div>
-      <div class="detail" aria-hidden="true">
-        <div class="grid">
-          <label>コメント</label>
-          <textarea name="detail"></textarea>
-          <label>優先度</label>
-          <select name="priority">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-          </select>
-          <label>期限</label>
-          <input type="datetime-local" name="due_at"/>
-          <label>リマインド</label>
-          <input type="datetime-local" name="remind_at"/>
-        </div>
-        <div class="rowBtns">
-          <button class="btn info" data-act="save">保存</button>
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-
 function toLocalValue(iso){
   if(!iso) return '';
   const d = new Date(iso);
@@ -199,16 +187,73 @@ function toLocalValue(iso){
 }
 function fromLocalValue(v){
   if(!v) return null;
-  // 入力はローカルタイム、Zに直す
   const d = new Date(v);
   return d.toISOString();
 }
 function defaultRemind(t){
-  // detail 初期表示：期限の2時間前、なければ null
   if(!t?.due_at) return null;
   const d = new Date(t.due_at);
   d.setHours(d.getHours()-2);
   return d.toISOString();
+}
+
+/* ====== カードHTML ====== */
+function cardHTML(t){
+  const due = fmtJST(t.due_at);
+  const isCompleted = t.status==='completed';
+  const leftAct   = isCompleted? 'uncomplete':'complete';
+  const leftLabel = isCompleted? '未完了':'完了';
+  const leftBtnCls= isCompleted? 'uncomplete':'ok'; /* ボタン色：未完了（黄）/完了（緑） */
+  const wrapCls   = isCompleted? 'swipe-wrap left-warn':'swipe-wrap';
+
+  return `
+  <div class="${wrapCls}" data-id="${t.id}">
+    <div class="actions">
+      <div class="left">
+        <button class="btn ${leftBtnCls}" data-act="${leftAct}">${leftLabel}</button>
+      </div>
+      <div class="right">
+        <button class="btn info"   data-act="detail">詳細</button>
+        <button class="btn danger" data-act="delete">削除</button>
+      </div>
+    </div>
+
+    <div class="track ${isCompleted?'ghost':''}">
+      <div class="card">
+        <div class="row">
+          <div class="titleTxt">${esc(t.title)||'(無題)'}</div>
+          <div class="meta">
+            ${Number.isFinite(t.priority)? `<span class="chip">★${t.priority}</span>`:''}
+            ${due? `<span class="chip">⏰ ${esc(due)}</span>`:''}
+          </div>
+        </div>
+      </div>
+
+      <div class="detail" id="detail-${t.id}">
+        <div class="grid">
+          <label>コメント</label>
+          <textarea name="detail">${esc(t.detail||'')}</textarea>
+
+          <label>優先度</label>
+          <select name="priority">
+            <option value="1" ${t.priority==1?'selected':''}>1</option>
+            <option value="2" ${t.priority==2?'selected':''}>2</option>
+            <option value="3" ${t.priority==3?'selected':''}>3</option>
+          </select>
+
+          <label>期限</label>
+          <input name="due_at" type="datetime-local" value="${toLocalValue(t.due_at)}"/>
+
+          <label>リマインド</label>
+          <input name="remind_at" type="datetime-local" value="${toLocalValue(defaultRemind(t))}"/>
+        </div>
+        <div class="rowBtns">
+          <button class="btn"    data-daction="cancel">閉じる</button>
+          <button class="btn ok" data-daction="save">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 async function loadTasks(userId){
@@ -217,18 +262,15 @@ async function loadTasks(userId){
     userId = prof.userId; gUserId = userId;
   }
   const url = `${LIST_API_URL}?user_id=${encodeURIComponent(userId)}`;
-  dbg('GET',url);
   let res,payload;
   try{
     res = await fetch(url, {method:'GET', credentials:'omit', headers:{'Content-Type':'application/json'}});
     payload = await res.json();
   }catch(e){
-    dbg('fetch/json error:', e.message||e);
     toast('読み込み失敗');
     return;
   }
   if(!res.ok || !payload || payload.ok!==true){
-    dbg('status=',res.status,'payload.ok=',payload?.ok);
     toast('読み込み失敗（HTTP '+res.status+'）');
     return;
   }
@@ -246,21 +288,24 @@ function render(){
   $completedList.innerHTML = cSorted.map(cardHTML).join('');
   $empty.hidden = (aSorted.length + cSorted.length) > 0;
 
-  // バインド：スワイプ、クリック
+  // スワイプバインド
   document.querySelectorAll('.swipe-wrap').forEach(bindSwipeCard);
-  // 各ボタン（完了/未完了・詳細・削除）
+
+  // 左列アクション（完了 / 未完了）
   document.querySelectorAll('.btn[data-act="complete"], .btn[data-act="uncomplete"]').forEach(b=>{
     b.onclick = async ()=>{
       const wrap = b.closest('.swipe-wrap');
       await runAction(wrap.dataset.id, b.getAttribute('data-act'));
     };
   });
+  // 詳細
   document.querySelectorAll('.btn[data-act="detail"]').forEach(b=>{
     b.onclick = ()=>{
       const wrap = b.closest('.swipe-wrap');
       toggleDetail(wrap, true);
     };
   });
+  // 削除
   document.querySelectorAll('.btn[data-act="delete"]').forEach(b=>{
     b.onclick = async ()=>{
       const wrap = b.closest('.swipe-wrap');
@@ -269,20 +314,16 @@ function render(){
     };
   });
 
-  // 詳細ビュー内の保存/閉じる
+  // 詳細ビュー内：保存/閉じる
   document.querySelectorAll('.detail').forEach(d=>{
     const wrap = d.closest('.swipe-wrap');
     const id   = wrap.dataset.id;
     const btnSave  = d.querySelector('[data-daction="save"]');
     const btnClose = d.querySelector('[data-daction="cancel"]');
-    const xClose   = d.querySelector('.x-close');
 
     const doClose = ()=> toggleDetail(wrap, false);
-
     if (btnClose) btnClose.onclick = doClose;
-    if (xClose)   xClose.onclick   = doClose;
-
-    if (btnSave) btnSave.onclick = async ()=>{
+    if (btnSave)  btnSave.onclick  = async ()=>{
       const fields = collectDetailFields(d);
       const ok = await runAction(id, 'update', {fields});
       if (ok) toggleDetail(wrap,false);
@@ -297,26 +338,25 @@ function render(){
       const open = !detail.classList.contains('open');
       // 他の開いている詳細を閉じる
       document.querySelectorAll('.detail.open').forEach(el=>{
-        if (el!==detail) {
-          el.classList.remove('open'); el.style.maxHeight='0px';
-        }
+        if (el!==detail) { el.classList.remove('open'); el.style.maxHeight='0px'; }
       });
       toggleDetail(wrap, open);
     };
   });
 
-  // 詳細外クリックで閉じる
+  // 詳細外クリックで閉じる（常にワンショット登録→再登録）
   document.addEventListener('click', onDocClickToClose, {once:true});
 }
+
 function onDocClickToClose(e){
   const open = document.querySelector('.detail.open');
   if(!open) return;
   if (!open.contains(e.target) && !e.target.closest('.card')) {
     open.classList.remove('open'); open.style.maxHeight='0px';
   }
-  // 次回のクリックにも反応するよう再登録
   document.addEventListener('click', onDocClickToClose, {once:true});
 }
+
 function collectDetailFields(detailEl){
   const v = Object.fromEntries([...detailEl.querySelectorAll('[name]')].map(i=>[i.name,i.value]));
   const patch = {};
@@ -329,22 +369,21 @@ function collectDetailFields(detailEl){
 }
 
 /* ============ スワイプ＆スナップ ============ */
-const L_EXPOSE = 88;   // 左ボタンがちゃんと見える停止位置
-const R_EXPOSE = 124;  // 右ボタンがちゃんと見える停止位置
-const L_COMMIT = 180;  // これ以上 or 高速なら即 実行（左）
-const R_COMMIT = 180;  // 右
-const SNAP = 10;       // 停止時の近接しきい値
-const FAST = 900;      // px/s 以上なら高速扱い
+const L_EXPOSE = 88;   // 左ボタンが見える停止位置（余白を合わせたい場合はこの値で調整）
+const R_EXPOSE = 124;  // 右ボタンが見える停止位置
+const L_COMMIT = 180;  // 強スワイプ（左）で即実行
+const R_COMMIT = 180;  // 強スワイプ（右）で即実行
+const FAST = 900;      // px/s 以上は高速扱い
 
 function bindSwipeCard(wrap){
   const track= wrap.querySelector('.track');
   let sx=0, dx=0, startT=0, dragging=false, raf=null;
 
   const setX = x => track.style.transform = `translateX(${Math.round(x)}px)`;
+
   const onStart = (clientX)=>{
     dragging=true; sx=clientX; dx=0; startT=performance.now();
     track.style.transition='none';
-    // スクロール抑制
     document.body.classList.add('no-scroll');
   };
   const onMove = (clientX)=>{
@@ -373,7 +412,7 @@ function bindSwipeCard(wrap){
       if (dx>=L_COMMIT || vx>FAST){
         doAct = isCompleted? 'uncomplete':'complete';
       } else if (dx>=L_EXPOSE){
-        snapTo = L_EXPOSE;
+        snapTo = L_EXPOSE; // 操作ボタン露出で停止
       }
     }
     // 右（詳細 / 削除）
@@ -381,7 +420,7 @@ function bindSwipeCard(wrap){
       if (-dx>=R_COMMIT || -vx>FAST){
         doAct = 'delete';
       } else if (-dx>=R_EXPOSE){
-        snapTo = -R_EXPOSE;
+        snapTo = -R_EXPOSE; // 操作ボタン露出で停止
       }
     }
 
@@ -415,7 +454,6 @@ function bindSwipeCard(wrap){
   // スナップ中に外側タップで戻す
   wrap.addEventListener('click', e=>{
     if (track.style.transform && track.style.transform!=='translateX(0px)'){
-      // ボタン以外をタップしたら戻す
       if (!e.target.classList.contains('btn')){
         track.style.transition='transform .18s ease';
         setX(0);
@@ -429,8 +467,8 @@ function bindActionButtonsWhileSnapped(wrap, snapTo){
   const setX = x => track.style.transform = `translateX(${Math.round(x)}px)`;
 
   if (snapTo>0){
-    const c = wrap.querySelector('.btn.ok');  // 完了/未完了
-    if (c) c.onclick = async ()=>{
+    const btn = wrap.querySelector('.left .btn');  // 完了/未完了
+    if (btn) btn.onclick = async ()=>{
       const isCompleted = track.classList.contains('ghost');
       const ok = await runAction(wrap.dataset.id, isCompleted?'uncomplete':'complete');
       if (ok) setX(0);
@@ -452,12 +490,10 @@ function toggleDetail(wrap, open){
   const detail = wrap.querySelector('.detail');
   if (!detail) return;
   if (open){
-    // 他を閉じる
     document.querySelectorAll('.detail.open').forEach(el=>{
       if (el!==detail){ el.classList.remove('open'); el.style.maxHeight='0px'; }
     });
     detail.classList.add('open');
-    // 実高さにアニメーション
     requestAnimationFrame(()=>{
       detail.style.maxHeight = detail.scrollHeight + 24 + 'px';
     });
@@ -470,9 +506,6 @@ function toggleDetail(wrap, open){
 /* ============ アクション実行 ============ */
 async function runAction(taskId, action, extra={}){
   try{
-    if (action==='delete'){
-      // 確認は呼び出し元でも行う
-    }
     const res = await fetch(ACTION_API_URL, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -481,15 +514,19 @@ async function runAction(taskId, action, extra={}){
     const j = await res.json().catch(()=>({ok:false}));
     if (!res.ok || j.ok===false){
       toast('action failed');
-      dbg('action failed:', action, j);
       return false;
     }
-    // ローカル反映（最低限）
+    // ローカル反映
     if (action==='complete' || action==='uncomplete'){
       const t = gAllTasks.find(x=>x.id===taskId);
       if (t){
-        if (action==='complete'){ t.status='completed'; t.completed_at=(new Date()).toISOString(); }
-        else{ t.status='active'; t.completed_at=null; }
+        if (action==='complete'){ 
+          t.status='completed'; 
+          t.completed_at=(new Date()).toISOString(); 
+        } else { 
+          t.status='active'; 
+          t.completed_at=null; 
+        }
       }
     } else if (action==='delete'){
       const t = gAllTasks.find(x=>x.id===taskId);
@@ -505,17 +542,14 @@ async function runAction(taskId, action, extra={}){
     toast(label+'しました');
     return true;
   }catch(e){
-    dbg('runAction error', e.message||e);
-    toast('エラー: '+(e.message||'failed'));
+    toast('エラー');
     return false;
   }
 }
 
 /* ============ 起動 ============ */
 async function bootstrap(){
-  dbg('LIFF_ID=', LIFF_ID);
   await liff.init({liffId: LIFF_ID});
-  dbg('liff.init OK');
   if (!liff.isLoggedIn()) liff.login();
   const prof = await liff.getProfile();
   gUserId = prof.userId;
@@ -544,5 +578,3 @@ bootstrap();
 </script>
 </body>
 </html>
-
-
